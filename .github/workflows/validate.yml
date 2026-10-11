@@ -14,6 +14,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: node --test scripts/setup.test.mjs scripts/runtime.test.mjs
+      - run: npm ci --ignore-scripts
+      - run: node scripts/build-betterdiscord.mjs
+      - run: npm test
       - run: node scripts/setup.mjs
       - run: node scripts/inject.mjs --download-only
+      - uses: actions/upload-artifact@v4
+        with:
+          name: betterdiscord-plugins-${{ matrix.os }}
+          path: dist/betterdiscord/*.plugin.js

@@ -10,7 +10,9 @@
     "setup": "node scripts/setup.mjs",
     "inject": "node scripts/inject.mjs",
     "uninject": "node scripts/inject.mjs --uninstall",
-    "test": "node --test scripts/setup.test.mjs scripts/runtime.test.mjs"
+    "build:betterdiscord": "node scripts/build-betterdiscord.mjs",
+    "test": "node --test scripts/setup.test.mjs scripts/runtime.test.mjs betterdiscord/host.test.mjs"
   },
-  "engines": { "node": ">=22" }
+  "engines": { "node": ">=22" },
+  "devDependencies": { "esbuild": "0.28.1" }
 }

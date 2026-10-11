@@ -2,7 +2,7 @@
 
 Navigate Discord with a controller and type with an on-screen keyboard. Built for an ROG Ally X running Bazzite; the main plugin reads standard controllers through Chromium's Gamepad API.
 
-HandheldControls v5.16 is a **Vencord custom plugin**, usable in Vesktop and in the official Discord desktop client with a custom Vencord build. It is not a standalone Discord extension. This first public release preserves the existing plugin implementation; official-client hardware testing is still needed.
+HandheldControls is available as a **Vencord custom plugin** for Vesktop/official Discord and as standalone **BetterDiscord `.plugin.js` files** built from the same source. Official-client hardware testing is still needed for both hosts.
 
 ## Features
 
@@ -70,12 +70,23 @@ Build with `node scripts/setup.mjs --client vesktop`. In Vesktop **Settings → 
 flatpak override --user dev.vencord.Vesktop --filesystem="$PWD/.build/Vencord"
 ```
 
+## BetterDiscord
+
+For Discord already using BetterDiscord, install the standalone plugin build:
+
+```sh
+node scripts/setup.mjs --client betterdiscord --inject
+```
+
+Enable HandheldControls under **Settings → BetterDiscord → Plugins**. Use `--plugins-dir "path/to/plugins"` for custom installations. The command uses BetterDiscord's existing plugin loader; it does not patch the client with Vencord. See [BetterDiscord installation, updates and removal](docs/betterdiscord.md).
+
 ## Platform coverage
 
 | Client | Windows | macOS | Linux |
 | --- | --- | --- | --- |
 | Official Discord | Native injector | Native injector | Native injector |
 | Discord with Vencord | Existing checkout or native injector | Existing checkout or native injector | Existing checkout or native injector |
+| Discord with BetterDiscord | Standalone plugin files | Standalone plugin files | Standalone plugin files |
 | Vesktop | Custom build folder | Custom build folder | Custom build folder, optional Flatpak/Game Mode helpers |
 
 Native installer binaries are upstream x64 on Windows/Linux and universal on macOS (Intel/Apple Silicon). Native Windows/Linux ARM builds are not supplied by upstream; the wrapper reports this explicitly. Linux Snap installs are unsupported by the upstream installer. Installation permissions and packaging can require platform-specific handling; choose a custom location when discovery misses an installation. The injector does not claim support for every third-party Discord mod.
@@ -106,7 +117,7 @@ See [Linux integration](docs/linux.md). These scripts are optional and are not i
 
 ## Development and validation
 
-Plugin source is in `plugins/`. `node --test scripts/setup.test.mjs scripts/runtime.test.mjs` checks staging, overwrite protection, platform selection, paths and failure handling. `node scripts/setup.mjs` checks plugin types and builds against the pinned Vencord revision. CI repeats tests, builds and installer download verification on Windows, macOS and Linux.
+Plugin source is in `plugins/`. Build BetterDiscord with `node scripts/setup.mjs --client betterdiscord`, then run `npm test` to check both hosts' adapters/installers. `node scripts/setup.mjs` checks plugin types and builds against the pinned Vencord revision. CI repeats tests, both builds and installer download verification on Windows, macOS and Linux.
 
 Before claiming support for a new client/controller, manually check section navigation, menus, channel switching, keyboard message entry, calibration, controller reconnect and plugin disable/re-enable. No automated hardware coverage is claimed. Discord UI changes can break selectors or internal APIs; pinning Vencord does not pin Discord's UI.
 

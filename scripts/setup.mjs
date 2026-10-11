@@ -8,7 +8,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const revision = "b52ed365cf2ea64a5019b419291a2d9d4d76852d";
 const names = ["handheldControls.ts", "heldIndicator.ts", "gamepadDebug.ts"];
 const args = process.argv.slice(2);
-const help = `Usage: node scripts/setup.mjs [--vencord PATH] [--stage-only] [--inject|--uninstall] [--client discord|vencord|vesktop] [--branch stable|ptb|canary|auto | --location PATH]
+const help = `Usage: node scripts/setup.mjs [--vencord PATH] [--stage-only] [--inject|--uninstall] [--client discord|vencord|vesktop|betterdiscord] [--branch stable|ptb|canary|auto | --location PATH] [--plugins-dir PATH]
 
 Default: clone pinned Vencord into .build/Vencord, copy plugins, install dependencies,
 type-check and build. No Discord installation is modified by the default command.
@@ -17,6 +17,8 @@ type-check and build. No Discord installation is modified by the default command
 --inject        After building, open Vencord's installer to select regular Discord.
 --uninstall     Restore Discord through the installer, without rebuilding.
 --client NAME   discord/vencord: patch official Discord; vesktop: build and show configuration.
+                betterdiscord: build .plugin.js files; --inject copies them to an existing BetterDiscord folder.
+--plugins-dir   Custom BetterDiscord plugin folder (use Open Plugins Folder in its settings).
 --branch NAME   Select a Discord channel without the interactive installation picker.
 --location PATH Select a custom Discord installation (instead of --branch).
 --help          Show this help.
@@ -27,7 +29,7 @@ Enable HandheldControls in Discord Settings > Vencord > Plugins and restart Disc
 try {
     let target = join(root, ".build", "Vencord");
     let explicit = false, stageOnly = false, inject = false, uninstall = false;
-    let client = "discord", branch, location;
+    let client = "discord", branch, location, pluginsDir;
     for (let i = 0; i < args.length; i++) {
         if (args[i] === "--help") { console.log(help); process.exit(0); }
         else if (args[i] === "--vencord") {
@@ -36,18 +38,33 @@ try {
         } else if (args[i] === "--stage-only") stageOnly = true;
         else if (args[i] === "--inject") inject = true;
         else if (args[i] === "--uninstall") uninstall = true;
-        else if (["--client", "--branch", "--location"].includes(args[i])) {
+        else if (["--client", "--branch", "--location", "--plugins-dir"].includes(args[i])) {
             const flag = args[i], value = args[++i];
             if (!value || value.startsWith("--")) throw new Error(`${flag} requires a value`);
             if (flag === "--client") client = value;
             if (flag === "--branch") branch = value;
             if (flag === "--location") location = resolve(value);
+            if (flag === "--plugins-dir") pluginsDir = resolve(value);
         }
         else throw new Error(`Unknown option: ${args[i]}`);
     }
     if (stageOnly && inject) throw new Error("--stage-only cannot be combined with --inject");
     if (stageOnly && uninstall || inject && uninstall) throw new Error("Choose one of --stage-only, --inject or --uninstall");
-    if (!["discord", "vencord", "vesktop"].includes(client)) throw new Error("--client must be discord, vencord or vesktop");
+    if (!["discord", "vencord", "vesktop", "betterdiscord"].includes(client)) throw new Error("--client must be discord, vencord, vesktop or betterdiscord");
+    if (pluginsDir && client !== "betterdiscord") throw new Error("--plugins-dir applies only to BetterDiscord");
+    if (client === "betterdiscord") {
+        if (branch || location || explicit || stageOnly) throw new Error("BetterDiscord uses --plugins-dir; Vencord and Discord selectors do not apply");
+        const bdArgs = pluginsDir ? ["--plugins-dir", pluginsDir] : [];
+        if (uninstall) run(process.execPath, [join(root, "scripts", "install-betterdiscord.mjs"), "--uninstall", ...bdArgs], root);
+        else {
+            const esbuild = join(root, "node_modules", "esbuild", "package.json");
+            if (!existsSync(esbuild)) run(process.execPath, [findNpm(), "ci", "--ignore-scripts", "--no-audit", "--no-fund"], root);
+            run(process.execPath, [join(root, "scripts", "build-betterdiscord.mjs")], root);
+            if (inject) run(process.execPath, [join(root, "scripts", "install-betterdiscord.mjs"), ...bdArgs], root);
+            else console.log(`BetterDiscord plugins ready: ${join(root, "dist", "betterdiscord")}`);
+        }
+        process.exit(0);
+    }
     if (client === "vesktop" && (inject || uninstall || branch || location)) throw new Error("Vesktop loads the dist folder; injection and Discord selectors apply to discord/vencord only");
     installerArguments(uninstall ? "uninstall" : "install", branch, location);
     const installArgs = ["--vencord", target, ...(branch ? ["--branch", branch] : []), ...(location ? ["--location", location] : [])];
