@@ -1,0 +1,14 @@
+{
+  "name": "discord-handheld-controls",
+  "version": "5.16.0",
+  "private": true,
+  "description": "Controller navigation and an on-screen keyboard for Discord through Vencord and Vesktop",
+  "license": "GPL-3.0-or-later",
+  "author": "Ahmad (AhmxdNYC)",
+  "repository": "github:AhmxdNYC/discord-handheld-controls",
+  "scripts": {
+    "setup": "node scripts/setup.mjs",
+    "test": "node --test scripts/setup.test.mjs"
+  },
+  "engines": { "node": ">=22" }
+}
