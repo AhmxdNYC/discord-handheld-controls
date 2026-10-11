@@ -14,12 +14,30 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.2'
+          cache: false
       - run: npm ci --ignore-scripts
       - run: node scripts/build-betterdiscord.mjs
       - run: npm test
+      - run: go test ./...
+        working-directory: installer
       - run: node scripts/setup.mjs
       - run: node scripts/inject.mjs --download-only
       - uses: actions/upload-artifact@v4
         with:
           name: betterdiscord-plugins-${{ matrix.os }}
           path: dist/betterdiscord/*.plugin.js
+      - run: python scripts/package-installers.py --target Windows-x64
+        if: runner.os == 'Windows'
+      - run: python3 scripts/package-installers.py --target Linux-x64
+        if: runner.os == 'Linux'
+      - run: python3 scripts/package-installers.py --target macOS-Intel
+        if: runner.os == 'macOS'
+      - run: python3 scripts/package-installers.py --target macOS-AppleSilicon
+        if: runner.os == 'macOS'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-installers-${{ matrix.os }}
+          path: dist/installers/*

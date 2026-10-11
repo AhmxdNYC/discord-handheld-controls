@@ -13,6 +13,18 @@ HandheldControls is available as a **Vencord custom plugin** for Vesktop/officia
 - Optional `HeldIndicator` companion and `GamepadDebug` diagnostic overlay.
 - Optional Linux controller bridge and Vesktop Steam Game Mode launcher.
 
+## Easy downloads
+
+Download your platform's **installer ZIP** from [Releases](https://github.com/AhmxdNYC/discord-handheld-controls/releases), extract the entire folder, and launch:
+
+| Download | Open |
+| --- | --- |
+| Windows x64 | `HandheldControls-Installer.exe` |
+| macOS Intel / Apple Silicon | `Install.command` |
+| Linux x64 | `Install.desktop` or `Install.sh` |
+
+Choose Discord/Vencord, BetterDiscord, Vesktop, or removal in the menu. These bundles include prebuilt plugins and the native injector, so **Node.js, Git and build tools are unnecessary**. Installed files are copied into a persistent user configuration folder; the extracted download can be deleted afterward. BetterDiscord must already be installed for its plugin option. See [download instructions](docs/downloadable-installers.md) for platform details.
+
 ## Windows, macOS and Linux: build and inject
 
 Install Git and Node.js 22 or later with npm. Setup installs the exact pnpm version declared by the pinned Vencord checkout automatically; a global pnpm installation is unnecessary.
@@ -118,6 +130,8 @@ See [Linux integration](docs/linux.md). These scripts are optional and are not i
 ## Development and validation
 
 Plugin source is in `plugins/`. Build BetterDiscord with `node scripts/setup.mjs --client betterdiscord`, then run `npm test` to check both hosts' adapters/installers. `node scripts/setup.mjs` checks plugin types and builds against the pinned Vencord revision. CI repeats tests, both builds and installer download verification on Windows, macOS and Linux.
+
+The native download launcher uses Go's standard library (`installer/`). With Go 1.22+ and Python 3.10+, run `go test ./...` inside `installer/`, then `python3 scripts/package-installers.py` from the repository root after building both plugin hosts. This cross-compiles four native launchers, verifies pinned upstream injector downloads, includes corresponding source archives and writes ZIPs plus checksums to `dist/installers/`. CI checks native launcher tests and packages downloads on each OS.
 
 Before claiming support for a new client/controller, manually check section navigation, menus, channel switching, keyboard message entry, calibration, controller reconnect and plugin disable/re-enable. No automated hardware coverage is claimed. Discord UI changes can break selectors or internal APIs; pinning Vencord does not pin Discord's UI.
 
