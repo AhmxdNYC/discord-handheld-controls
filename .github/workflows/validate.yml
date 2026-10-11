@@ -4,15 +4,16 @@ permissions:
   contents: read
 jobs:
   build:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - uses: pnpm/action-setup@v4
-        with:
-          version: '11.9.0'
-          run_install: false
-      - run: node --test scripts/setup.test.mjs
+      - run: node --test scripts/setup.test.mjs scripts/runtime.test.mjs
       - run: node scripts/setup.mjs
+      - run: node scripts/inject.mjs --download-only

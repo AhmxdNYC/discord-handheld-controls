@@ -41,3 +41,16 @@ test("stage-only cannot trigger injection", t => {
     assert.match(result.stderr, /cannot be combined/);
     assert.equal(existsSync(join(target, "src", "userplugins", "handheldControls.ts")), false);
 });
+test("Vesktop rejects Discord patch options before touching source", t => {
+    const target = fixture(t);
+    const result = setup(target, "--client", "vesktop", "--branch", "stable");
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /Vesktop loads the dist folder/);
+    assert.equal(existsSync(join(target, "src", "userplugins", "handheldControls.ts")), false);
+});
+test("invalid Discord selectors fail before staging", t => {
+    const target = fixture(t);
+    assert.equal(setup(target, "--branch", "bogus").status, 1);
+    assert.equal(setup(target, "--branch", "stable", "--location", target).status, 1);
+    assert.equal(setup(target, "--uninstall").status, 1);
+});

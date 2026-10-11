@@ -13,11 +13,11 @@ HandheldControls v5.16 is a **Vencord custom plugin**, usable in Vesktop and in 
 - Optional `HeldIndicator` companion and `GamepadDebug` diagnostic overlay.
 - Optional Linux controller bridge and Vesktop Steam Game Mode launcher.
 
-## Regular Discord: build and inject
+## Windows, macOS and Linux: build and inject
 
-Install Git, Node.js 22 or later, and pnpm. The pinned Vencord checkout declares its own pnpm version; use that version for reproducible builds.
+Install Git and Node.js 22 or later with npm. Setup installs the exact pnpm version declared by the pinned Vencord checkout automatically; a global pnpm installation is unnecessary.
 
-On Linux or macOS:
+In a terminal on Windows, macOS or Linux:
 
 ```sh
 git clone https://github.com/AhmxdNYC/discord-handheld-controls.git
@@ -25,7 +25,7 @@ cd discord-handheld-controls
 node scripts/setup.mjs
 ```
 
-This clones a tested Vencord revision into `.build/Vencord`, copies the plugins, installs dependencies, type-checks and builds. To open Vencord's installer for regular Discord, fully quit Discord and run:
+This clones a tested Vencord revision into `.build/Vencord`, copies the plugins, installs dependencies, type-checks and builds. To open the native installer for regular Discord or Discord already running Vencord, fully quit Discord and run:
 
 ```sh
 node scripts/setup.mjs --inject
@@ -33,7 +33,21 @@ node scripts/setup.mjs --inject
 
 Choose the Discord installation in the installer. Restart Discord, open **Settings → Vencord → Plugins**, enable **HandheldControls**, and restart again. Keep this repository and its `.build/Vencord` folder: the development installation loads files from there.
 
-For an existing Vencord checkout (including Windows):
+Alternatively, use the platform launcher: `Install-Windows.cmd`, `Install-macOS.command`, or `./install-linux.sh`. Each builds the plugins and opens the native installer. On macOS/Linux, run `chmod +x Install-macOS.command install-linux.sh` if the downloaded files lost executable permissions.
+
+Select a particular channel or installation using `--branch stable`, `--branch ptb`, `--branch canary`, or `--location "path to Discord"`. Branch and location are mutually exclusive. Without either, the installer provides a picker.
+
+```sh
+node scripts/setup.mjs --client vencord --inject --branch stable
+```
+
+`--client discord` and `--client vencord` both target the official Discord application; Vencord is its plugin host. If you already have Vencord, use its source checkout to preserve your other custom plugins:
+
+```sh
+node scripts/setup.mjs --vencord /path/to/Vencord --client vencord --inject
+```
+
+You can also stage without building:
 
 ```sh
 node scripts/setup.mjs --vencord /path/to/Vencord --stage-only
@@ -44,17 +58,29 @@ pnpm build
 pnpm inject
 ```
 
-On Windows, substitute a quoted Windows path, such as `"C:\Users\you\Documents\Vencord"`. Automatic build/injection through this repository's wrapper is currently Linux/macOS only; staging and the manual pnpm steps work across platforms. The wrapper refuses to overwrite differing plugin files; back up edited copies or use a fresh checkout.
+On Windows, substitute a quoted Windows path, such as `"C:\Users\you\Documents\Vencord"`. Automatic setup and injection use the same Node command on all three operating systems. The wrapper refuses to overwrite differing plugin files; back up edited copies or use a fresh checkout. Installing a fresh custom build replaces the Vencord code used by the selected Discord installation, so use your existing checkout when you need to retain other custom plugins.
 
-To uninstall the client modification, run `pnpm uninject` from the Vencord checkout and select the installation to restore. To disable only controller controls, switch off HandheldControls in the Plugins page. Discord updates can require reinjection. See [Vencord's installation documentation](https://docs.vencord.dev/installing/) for supported installation formats and troubleshooting.
+To uninstall the client modification without rebuilding, run `node scripts/setup.mjs --uninstall` and select the installation to restore. You can use the same `--branch` or `--location` selector. To disable only controller controls, switch off HandheldControls in the Plugins page. Discord updates can require reinjection. See [Vencord's installation documentation](https://docs.vencord.dev/installing/) for supported installation formats and troubleshooting.
 
 ## Vesktop
 
-Build with `node scripts/setup.mjs`. In Vesktop **Settings → Vesktop Settings → Open Developer Settings → Vencord Location**, select `.build/Vencord/dist`, then fully restart Vesktop and enable HandheldControls. Flatpak needs persistent access to the checkout; for example:
+Build with `node scripts/setup.mjs --client vesktop`. In Vesktop **Settings → Vesktop Settings → Open Developer Settings → Vencord Location**, select `.build/Vencord/dist`, then fully restart Vesktop and enable HandheldControls. Flatpak needs persistent access to the checkout; for example:
 
 ```sh
 flatpak override --user dev.vencord.Vesktop --filesystem="$PWD/.build/Vencord"
 ```
+
+## Platform coverage
+
+| Client | Windows | macOS | Linux |
+| --- | --- | --- | --- |
+| Official Discord | Native injector | Native injector | Native injector |
+| Discord with Vencord | Existing checkout or native injector | Existing checkout or native injector | Existing checkout or native injector |
+| Vesktop | Custom build folder | Custom build folder | Custom build folder, optional Flatpak/Game Mode helpers |
+
+Native installer binaries are upstream x64 on Windows/Linux and universal on macOS (Intel/Apple Silicon). Native Windows/Linux ARM builds are not supplied by upstream; the wrapper reports this explicitly. Linux Snap installs are unsupported by the upstream installer. Installation permissions and packaging can require platform-specific handling; choose a custom location when discovery misses an installation. The injector does not claim support for every third-party Discord mod.
+
+After a build, `node scripts/inject.mjs` installs without rebuilding and `node scripts/inject.mjs --uninstall` restores the client. Both accept `--vencord`, `--branch` and `--location`. `--download-only` verifies the installer without patching. Downloads use pinned Vencord Installer v1.4.2 assets and SHA-256 digests.
 
 ## Default controls
 
@@ -80,7 +106,7 @@ See [Linux integration](docs/linux.md). These scripts are optional and are not i
 
 ## Development and validation
 
-Plugin source is in `plugins/`. `node --test scripts/setup.test.mjs` checks staging and overwrite protection. `node scripts/setup.mjs` checks plugin types and builds against the pinned Vencord revision. CI repeats this from a clean checkout.
+Plugin source is in `plugins/`. `node --test scripts/setup.test.mjs scripts/runtime.test.mjs` checks staging, overwrite protection, platform selection, paths and failure handling. `node scripts/setup.mjs` checks plugin types and builds against the pinned Vencord revision. CI repeats tests, builds and installer download verification on Windows, macOS and Linux.
 
 Before claiming support for a new client/controller, manually check section navigation, menus, channel switching, keyboard message entry, calibration, controller reconnect and plugin disable/re-enable. No automated hardware coverage is claimed. Discord UI changes can break selectors or internal APIs; pinning Vencord does not pin Discord's UI.
 
