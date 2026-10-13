@@ -317,7 +317,7 @@ function opt<T = any>(key: string): T {
     return (v === undefined || v === null || v === "" ? OPT_DEFAULTS[key] : v) as T;
 }
 
-const VERSION = "v6.29";
+const VERSION = "v6.30";
 const brandHtml = `<a href="https://github.com/AhmxdNYC/discord-handheld-controls" target="_blank" rel="noopener noreferrer" aria-label="Handheld Controls on GitHub">Handheld × Controller</a>`;
 // Discord's own message sending (used only if pressing Enter in the box doesn't send)
 const MessageActions = findByPropsLazy("sendMessage", "editMessage");
@@ -3009,6 +3009,12 @@ function visibleSectionRect(el: Element): DOMRect {
 }
 
 function updateOverlays() {
+    // The keyboard owns focus here; a native composer ring underneath leaks glow past its edges.
+    if (kbEl && typingMode && !openMenu() && !nativeExpressionPicker()) {
+        if (ringEl) place(ringEl, null);
+        if (frameEl) place(frameEl, null);
+        return;
+    }
     const menuOpen = !!openMenu();
     const hasSection = alive(section);
     const hasItem = alive(focused) && (mode === "inside" || menuOpen);
@@ -6336,6 +6342,9 @@ li[id^="chat-messages-"][data-hh-replying] > [class*="message_"]:is(#hh-never, *
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .hh-kb.hh-kb-lay .hh-preview-line { background: var(--v-panel); border: 1px solid var(--v-line); color: var(--v-fg); }
 .hh-kb.hh-kb-over .hh-legend-row { height: 21px; }
+/* Fit glyphs inside their actual row boxes instead of scaling oversized badges with negative margins. */
+.hh-kb .hh-side .hh-legend-btn .hh-badge { transform: none; margin: 0; height: calc(100% - .2em); max-height: 100%; min-height: 0; min-width: 1.8em; width: 1.8em; padding: 0; font-size: .75em; box-sizing: border-box; }
+.hh-kb .hh-side .hh-legend-btn .hh-badge > svg { width: 1.2em; height: 1.2em; }
 .hh-side-l { flex-grow: 2; max-width: 460px; }
 .hh-split .hh-side-r { min-width: 190px; }
 .hh-sugg-hint2 { margin-top: 2px; }
