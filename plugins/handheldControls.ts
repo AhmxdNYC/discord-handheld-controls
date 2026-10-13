@@ -317,7 +317,7 @@ function opt<T = any>(key: string): T {
     return (v === undefined || v === null || v === "" ? OPT_DEFAULTS[key] : v) as T;
 }
 
-const VERSION = "v6.23";
+const VERSION = "v6.24";
 const brandHtml = `<a href="https://github.com/AhmxdNYC/discord-handheld-controls" target="_blank" rel="noopener noreferrer" aria-label="Handheld Controls on GitHub">Handheld × Controller</a>`;
 // Discord's own message sending (used only if pressing Enter in the box doesn't send)
 const MessageActions = findByPropsLazy("sendMessage", "editMessage");
@@ -2673,6 +2673,40 @@ function toggleDebug() {
 }
 
 /** "Controller connected / disconnected" card (top right), with the controller's name and calibration status. */
+/** Persistent connection status belongs to the native header layout, not controller overlays. */
+let controllerStatusEl: HTMLSpanElement | null = null;
+function detectedControllerNames(pads: readonly (Gamepad | null)[], bridgeAlive: boolean): string[] {
+    const connected = pads.filter((p): p is Gamepad => !!p && p.connected && !/^HH Fake/.test(p.id));
+    const names = [...new Map(connected.map(p => [p.index, padName(p.id)])).values()];
+    // The bridge represents the same physical controller; never count it twice.
+    return names.length ? names : bridgeAlive ? ["Controller (HandheldControls bridge)"] : [];
+}
+function updateControllerStatus() {
+    const names = detectedControllerNames([...navigator.getGamepads()], !!extPad && performance.now() - extAliveAt < 3000);
+    const bar = document.querySelector('[class*="base_"] > [class*="bar_"]');
+    const slot = bar?.querySelector<HTMLElement>(':scope > [class*="trailing"]');
+    if (!names.length || !slot || !isVisible(slot)) { controllerStatusEl?.remove(); controllerStatusEl = null; return; }
+    if (!controllerStatusEl) {
+        controllerStatusEl = document.createElement("span");
+        controllerStatusEl.className = "hh-controller-status";
+        controllerStatusEl.setAttribute("role", "img");
+        controllerStatusEl.style.cssText = "display:inline-flex;align-items:center;gap:.25em;flex:0 0 auto;max-width:100%;pointer-events:none;line-height:1";
+    }
+    if (controllerStatusEl.parentElement !== slot) slot.append(controllerStatusEl);
+    const nativeIcon = slot.querySelector<SVGElement>('svg:not(.hh-controller-status svg)');
+    const size = nativeIcon?.getBoundingClientRect().height || parseFloat(getComputedStyle(slot).fontSize);
+    controllerStatusEl.style.fontSize = `${size}px`;
+    controllerStatusEl.style.color = nativeIcon ? getComputedStyle(nativeIcon).color : "inherit";
+    const count = names.length;
+    if (controllerStatusEl.dataset.count !== String(count)) {
+        controllerStatusEl.dataset.count = String(count);
+        const icon = '<svg aria-hidden="true" viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 6h10c2 0 3 2 3.5 4l1 7c.3 2-2 3-3.3 1.6L15 15H9l-3.2 3.6C4.5 20 2.2 19 2.5 17l1-7C4 8 5 6 7 6Z"/><path d="M7 9v4m-2-2h4"/><circle cx="16" cy="10" r=".6"/><circle cx="18" cy="12" r=".6"/></svg>';
+        controllerStatusEl.innerHTML = icon.repeat(Math.min(count, 3)) + (count > 3 ? `<span style="font-size:.7em">×${count}</span>` : "");
+    }
+    const label = `${count} controller${count === 1 ? "" : "s"} detected: ${names.join(", ")}`;
+    controllerStatusEl.setAttribute("aria-label", label);
+    controllerStatusEl.title = label;
+}
 let padCardEl: HTMLDivElement | null = null, padCardTimer = 0;
 const padName = (id: string) => id.replace(/\s*\((?:STANDARD GAMEPAD|Vendor)[^)]*\)\s*/gi, " ").replace(/^Microsoft\s+/i, "").replace(/\s+/g, " ").trim() || "Controller";
 function showPadCard(pad: Gamepad, connected: boolean) {
@@ -3330,7 +3364,7 @@ let extTransitions: Gamepad[] = [];
 let extInputKey = "";
 (window as any).__hhExtPadSet = (st: { b: number[]; a: number[]; } | null) => {
     extAliveAt = performance.now();
-    if (!st) return;
+    if (!st) return; // Existing bridges send null as an idle heartbeat.
     extPad = {
         id: "Controller (via HandheldControls bridge)", index: 0, connected: true, mapping: "standard", timestamp: extAliveAt,
         axes: st.a, buttons: st.b.slice(0, 17).map(v => ({ pressed: v > 0.5, touched: v > 0, value: v })),
@@ -3347,6 +3381,9 @@ let extInputKey = "";
         extTransitions[extTransitions.length - 1] = extPad;
     }
     extInputKey = key;
+};
+(window as any).__hhExtPadDisconnect = () => {
+    extPad = null; sampledExtPad = null; extTransitions = []; extInputKey = ""; extAliveAt = 0;
 };
 function sampleControllerInput() {
     if ((window as any).__hhPad) { extTransitions = []; sampledExtPad = extPad; return; }
@@ -3371,6 +3408,7 @@ function tick() {
     frame++;
     try {
         tickInner();
+        if (frame % 30 === 0) updateControllerStatus();
         const idle = performance.now() - lastPadUse > 15000 && !kbEl && !panelEl && !calibEl && !helpEl;
         if (controllerActive && (!idle || frame % 30 === 0)) updateOverlays();
         if (controllerActive && frame % 4 === 0) updateHints();
@@ -6498,6 +6536,7 @@ export default definePlugin({
 
     stop() {
         cancelAnimationFrame(raf);
+        controllerStatusEl?.remove(); controllerStatusEl = null;
         menuObserver?.disconnect(); menuObserver = null;
         document.removeEventListener("keydown", onBackKey, true);
         document.removeEventListener("copy", onCopy, true);

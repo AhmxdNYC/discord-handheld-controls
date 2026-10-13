@@ -30,3 +30,10 @@ test('background and native-dialog input does not replay into Discord',()=>{
     const p=setup();p.send(0);p.document.hasFocus=()=>false;p.send();p.document.hasFocus=()=>true;p.sampleControllerInput();assert.equal(p.getPad().buttons[0].pressed,false);
     p.window.__hhNativeFileChooser=true;p.send(1);p.send();p.window.__hhNativeFileChooser=false;p.sampleControllerInput();assert.equal(p.getPad().buttons[1].pressed,false);
 });
+test('bridge disconnect clears stale controller state',()=>{
+ const p=setup();p.send(0);p.sampleControllerInput();p.window.__hhExtPadDisconnect();assert.equal(p.getPad(),null);
+});
+
+test('legacy bridge idle heartbeat keeps controller detected',()=>{
+ const p=setup();p.send();p.sampleControllerInput();p.window.__hhExtPadSet(null);assert.ok(p.getPad());
+});

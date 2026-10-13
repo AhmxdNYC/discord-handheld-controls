@@ -248,6 +248,11 @@ def run():
                         dirty = True
         except OSError:
             log("controller went away, looking again")
+            if cdp.sock is not None:
+                try:
+                    cdp.send("window.__hhExtPadDisconnect && window.__hhExtPadDisconnect()")
+                except Exception:
+                    cdp.close()
             pad = None
             continue
         if dirty and cdp.sock is not None:
