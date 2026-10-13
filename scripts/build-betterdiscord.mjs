@@ -13,7 +13,7 @@ for (const [source, name] of [["handheldControls", "HandheldControls"], ["heldIn
         outfile: join(output, `${name}.plugin.js`),
         bundle: true, platform: "browser", format: "cjs", target: "es2022",
         alias: { "@api/DataStore": host, "@api/Settings": host, "@utils/types": host, "@webpack/common": host, "@webpack": host },
-        banner: { js: `/**\n * @name ${name}\n * @author Ahmad (AhmxdNYC)\n * @version 6.24.0\n * @description Controller support companion for Discord. GPL-3.0-or-later.\n * @source https://github.com/AhmxdNYC/discord-handheld-controls\n */` },
+        banner: { js: `/**\n * @name ${name}\n * @author Ahmad (AhmxdNYC)\n * @version 6.25.0\n * @description Controller support companion for Discord. GPL-3.0-or-later.\n * @source https://github.com/AhmxdNYC/discord-handheld-controls\n */` },
         footer: { js: "module.exports = module.exports.default;" },
         legalComments: "inline"
     });

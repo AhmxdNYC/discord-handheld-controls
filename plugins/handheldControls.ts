@@ -317,7 +317,7 @@ function opt<T = any>(key: string): T {
     return (v === undefined || v === null || v === "" ? OPT_DEFAULTS[key] : v) as T;
 }
 
-const VERSION = "v6.24";
+const VERSION = "v6.25";
 const brandHtml = `<a href="https://github.com/AhmxdNYC/discord-handheld-controls" target="_blank" rel="noopener noreferrer" aria-label="Handheld Controls on GitHub">Handheld × Controller</a>`;
 // Discord's own message sending (used only if pressing Enter in the box doesn't send)
 const MessageActions = findByPropsLazy("sendMessage", "editMessage");
@@ -2692,7 +2692,7 @@ function updateControllerStatus() {
         controllerStatusEl.setAttribute("role", "img");
         controllerStatusEl.style.cssText = "display:inline-flex;align-items:center;gap:.25em;flex:0 0 auto;max-width:100%;pointer-events:none;line-height:1";
     }
-    if (controllerStatusEl.parentElement !== slot) slot.append(controllerStatusEl);
+    if (slot.firstElementChild !== controllerStatusEl) slot.prepend(controllerStatusEl);
     const nativeIcon = slot.querySelector<SVGElement>('svg:not(.hh-controller-status svg)');
     const size = nativeIcon?.getBoundingClientRect().height || parseFloat(getComputedStyle(slot).fontSize);
     controllerStatusEl.style.fontSize = `${size}px`;
@@ -2700,7 +2700,7 @@ function updateControllerStatus() {
     const count = names.length;
     if (controllerStatusEl.dataset.count !== String(count)) {
         controllerStatusEl.dataset.count = String(count);
-        const icon = '<svg aria-hidden="true" viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 6h10c2 0 3 2 3.5 4l1 7c.3 2-2 3-3.3 1.6L15 15H9l-3.2 3.6C4.5 20 2.2 19 2.5 17l1-7C4 8 5 6 7 6Z"/><path d="M7 9v4m-2-2h4"/><circle cx="16" cy="10" r=".6"/><circle cx="18" cy="12" r=".6"/></svg>';
+        const icon = '<span aria-hidden="true" style="display:inline-flex;align-items:center;justify-content:center;width:1em;height:1em">🎮</span>';
         controllerStatusEl.innerHTML = icon.repeat(Math.min(count, 3)) + (count > 3 ? `<span style="font-size:.7em">×${count}</span>` : "");
     }
     const label = `${count} controller${count === 1 ? "" : "s"} detected: ${names.join(", ")}`;
