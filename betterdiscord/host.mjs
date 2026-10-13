@@ -107,7 +107,7 @@ export default function definePlugin(plugin) {
         started = false;
         getName() { return plugin.name; }
         getAuthor() { return "Ahmad (AhmxdNYC)"; }
-        getVersion() { return "6.32.0"; }
+        getVersion() { return "6.33.0"; }
         getDescription() { return plugin.description; }
         start() {
             if (this.started) return;

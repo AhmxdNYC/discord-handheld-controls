@@ -317,7 +317,7 @@ function opt<T = any>(key: string): T {
     return (v === undefined || v === null || v === "" ? OPT_DEFAULTS[key] : v) as T;
 }
 
-const VERSION = "v6.32";
+const VERSION = "v6.33";
 const brandHtml = `<a href="https://github.com/AhmxdNYC/discord-handheld-controls" target="_blank" rel="noopener noreferrer" aria-label="Handheld Controls on GitHub">Handheld × Controller</a>`;
 // Discord's own message sending (used only if pressing Enter in the box doesn't send)
 const MessageActions = findByPropsLazy("sendMessage", "editMessage");
@@ -1163,7 +1163,7 @@ function backOutOfTyping() {
     // (and not in the search box: there Escape throws away the search results)
     // editing a message (the box inside the message itself): B cancels the edit, whatever is in it (☰ saves)
     const editedMsg = f?.closest(ROW.message) ?? null;
-    if (f && f.isContentEditable && !f.matches('[role="combobox"]') && !f.closest('[role="dialog"]') && (editedMsg || !(f.innerText ?? "").replace(/﻿/g, "").trim())) pressKey("Escape", f);
+    if (f && f.isContentEditable && !f.matches('[role="combobox"]') && !f.closest('[role="dialog"]') && (editedMsg || !editorText(f).trim())) pressKey("Escape", f);
     stopTyping();
     // the edit box goes away with the edit: land back on the message itself
     if (editedMsg) setTimeout(() => { if (alive(editedMsg) && mode === "inside") setItem(editedMsg); }, 120);
@@ -4176,6 +4176,19 @@ function suggestWords(prefix: string, prev: string | null): string[] {
     return [...scored.entries()].filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([w]) => w);
 }
 
+/** Read the editor's content, excluding tooltip/accessibility copies and Slate bookkeeping. */
+function editorText(node: Node): string {
+    if (node.nodeType === 3) return (node.textContent ?? "").replace(/\uFEFF/g, "");
+    if (node.nodeType !== 1 && node.nodeType !== 11) return "";
+    const el = node.nodeType === 1 ? node as HTMLElement : null;
+    if (el?.matches("input, textarea")) return (el as HTMLInputElement).value;
+    if (el?.matches('[hidden], [aria-hidden="true"], [data-slate-spacer], [role="tooltip"], [class*="hiddenVisually"], [class*="sr-only"], script, style, svg')) return "";
+    if (el?.matches('img')) return el.getAttribute("alt") ?? "";
+    if (el?.matches('br')) return "\n";
+    const children = [...node.childNodes];
+    return children.map((child, i) => editorText(child) + (i < children.length - 1 && child.nodeType === 1
+        && (child as Element).matches('div, p, li') && !(child as Element).matches('[data-slate-inline="true"]') ? "\n" : "")).join("");
+}
 const escapeSuggestion = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 type DiscordSuggestion = { target: HTMLElement; label: string; };
 let discordSuggestions: DiscordSuggestion[] = [];
@@ -4230,7 +4243,7 @@ let suggIndex = 0;
 function currentWord(): { prefix: string; prev: string | null; } {
     const f = kbTarget();
     if (!f) return { prefix: "", prev: null };
-    const text = (f.matches("input, textarea") ? (f as HTMLInputElement).value : f.innerText ?? "").replace(/﻿/g, "").replace(/\n+$/, "");
+    const text = editorText(f).replace(/﻿/g, "").replace(/\n+$/, "");
     const m = /([A-Za-z0-9']*)$/.exec(text)!;
     const before = tokenize(text.slice(0, text.length - m[1].length));
     return { prefix: m[1], prev: before.length && /[A-Za-z0-9']\s*$/.test(text.slice(0, text.length - m[1].length)) ? before[before.length - 1] : null };
@@ -4261,7 +4274,7 @@ function updateSuggestions() {
     const pv = kbEl.querySelector(".hh-preview");
     const f = kbTarget();
     if (pv && f) {
-        const text = (f.matches("input, textarea") ? (f as HTMLInputElement).value : f.innerText ?? "").replace(/\uFEFF/g, "").replace(/\n+$/, "")
+        const text = editorText(f).replace(/\uFEFF/g, "").replace(/\n+$/, "")
             .replace(/\n*(:[\w~+-]+:)\n*/g, "$1"); // (emoji in the box come out wrapped in line breaks)
         // where the cursor is (so ◀ ▶ visibly move it)
         let at = text.length;
@@ -4271,7 +4284,7 @@ function updateSuggestions() {
                 const sel = window.getSelection();
                 if (sel && sel.rangeCount && f.contains(sel.anchorNode)) {
                     const r = document.createRange(); r.selectNodeContents(f); r.setEnd(sel.anchorNode!, sel.anchorOffset);
-                    at = Math.min(text.length, r.toString().replace(/\uFEFF/g, "").length);
+                    at = Math.min(text.length, editorText(r.cloneContents()).length);
                 }
             }
         } catch { }
@@ -5112,7 +5125,7 @@ function kbSend(target: HTMLElement | null = kbTarget()) {
     if (!f) return;
     if (document.activeElement !== f) f.focus();
     const isField = f.tagName === "INPUT" || f.tagName === "TEXTAREA";
-    const raw = () => (isField ? (f as HTMLInputElement).value : (f.innerText ?? f.textContent ?? "")).replace(/\uFEFF/g, "");
+    const raw = () => editorText(f);
     const text = () => raw().trim();
     const original = text();
     const originalRaw = raw();
@@ -5157,7 +5170,8 @@ function kbSend(target: HTMLElement | null = kbTarget()) {
     }];
     // Enter first: with the text really in the editor, Discord's own Enter handler sends (checked live on the channel box
     // and on a profile card, where it goes to that person's DM). A card gets no direct send (see `direct`).
-    const steps = hasAttachments ? [enterKey] : inPopout ? [enterKey, sendButton] : [enterKey, enterInput, sendButton, direct];
+    const richContent = !!f.querySelector('[data-slate-void="true"], [contenteditable="false"]');
+    const steps = hasAttachments ? [enterKey] : (inPopout || richContent) ? [enterKey, sendButton] : [enterKey, enterInput, sendButton, direct];
     const run = (i: number) => {
         if (i >= steps.length) { restore(); debugNote("send: nothing worked"); return; }
         steps[i][1]();
