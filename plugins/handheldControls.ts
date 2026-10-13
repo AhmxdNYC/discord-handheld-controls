@@ -317,7 +317,7 @@ function opt<T = any>(key: string): T {
     return (v === undefined || v === null || v === "" ? OPT_DEFAULTS[key] : v) as T;
 }
 
-const VERSION = "v6.25";
+const VERSION = "v6.26";
 const brandHtml = `<a href="https://github.com/AhmxdNYC/discord-handheld-controls" target="_blank" rel="noopener noreferrer" aria-label="Handheld Controls on GitHub">Handheld × Controller</a>`;
 // Discord's own message sending (used only if pressing Enter in the box doesn't send)
 const MessageActions = findByPropsLazy("sendMessage", "editMessage");
@@ -2690,7 +2690,7 @@ function updateControllerStatus() {
         controllerStatusEl = document.createElement("span");
         controllerStatusEl.className = "hh-controller-status";
         controllerStatusEl.setAttribute("role", "img");
-        controllerStatusEl.style.cssText = "display:inline-flex;align-items:center;gap:.25em;flex:0 0 auto;max-width:100%;pointer-events:none;line-height:1";
+        controllerStatusEl.style.cssText = "display:inline-flex;align-items:center;gap:.35em;flex:0 1 auto;max-width:100%;pointer-events:none;line-height:1;white-space:nowrap;padding:.2em .4em;border-radius:.5em;border:1px solid color-mix(in srgb,var(--status-positive,currentColor) 55%,transparent);background:color-mix(in srgb,var(--status-positive,currentColor) 12%,transparent);box-sizing:border-box";
     }
     if (slot.firstElementChild !== controllerStatusEl) slot.prepend(controllerStatusEl);
     const nativeIcon = slot.querySelector<SVGElement>('svg:not(.hh-controller-status svg)');
@@ -2701,7 +2701,7 @@ function updateControllerStatus() {
     if (controllerStatusEl.dataset.count !== String(count)) {
         controllerStatusEl.dataset.count = String(count);
         const icon = '<span aria-hidden="true" style="display:inline-flex;align-items:center;justify-content:center;width:1em;height:1em">🎮</span>';
-        controllerStatusEl.innerHTML = icon.repeat(Math.min(count, 3)) + (count > 3 ? `<span style="font-size:.7em">×${count}</span>` : "");
+        controllerStatusEl.innerHTML = icon.repeat(Math.min(count, 3)) + `<span aria-hidden="true" style="width:.28em;height:.28em;border-radius:50%;background:var(--status-positive,currentColor);flex:none"></span><span style="font-size:.6em;font-weight:600">${count > 1 ? `${count} connected` : "Connected"}</span>`;
     }
     const label = `${count} controller${count === 1 ? "" : "s"} detected: ${names.join(", ")}`;
     controllerStatusEl.setAttribute("aria-label", label);
