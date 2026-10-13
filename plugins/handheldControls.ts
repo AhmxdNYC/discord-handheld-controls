@@ -317,7 +317,7 @@ function opt<T = any>(key: string): T {
     return (v === undefined || v === null || v === "" ? OPT_DEFAULTS[key] : v) as T;
 }
 
-const VERSION = "v6.33";
+const VERSION = "v6.34";
 const brandHtml = `<a href="https://github.com/AhmxdNYC/discord-handheld-controls" target="_blank" rel="noopener noreferrer" aria-label="Handheld Controls on GitHub">Handheld × Controller</a>`;
 // Discord's own message sending (used only if pressing Enter in the box doesn't send)
 const MessageActions = findByPropsLazy("sendMessage", "editMessage");
@@ -4694,17 +4694,17 @@ function kbFeedback(kind: "key" | "del" | "space") {
 // Split: the keyboard in two halves; each stick POINTS at a key on its half (no walking), LB / RB type them.
 const SPLIT_LETTERS: [string[][], string[][]] = [
     [["q", "w", "e", "r", "t"], ["a", "s", "d", "f", "g"], ["z", "x", "c", "v", "b"]],
-    [["y", "u", "i", "o", "p"], ["h", "j", "k", "l", "'"], ["n", "m", ",", ".", "?"]],
+    [["y", "u", "i", "o", "p"], ["h", "j", "k", "l", "'"], ["n", "m", "@", "/", "?"]],
 ];
 const SPLIT_SYMBOLS: [string[][], string[][]] = [
-    [["1", "2", "3", "4", "5"], ["!", "@", "#", "$", "%"], ["(", ")", "-", "_", "+"]],
-    [["6", "7", "8", "9", "0"], ["^", "&", "*", "=", "/"], [":", ";", "\"", "😂", "👍"]],
+    [["1", "2", "3", "4", "5"], ["!", ",", "#", "$", "%"], ["(", ")", "-", "_", "+"]],
+    [["6", "7", "8", "9", "0"], ["^", "&", "*", "=", "."], [":", ";", "\"", "😂", "👍"]],
 ];
 /** With "more half-tilt keys" (setting): half up / half down are keys too ([3, 0] / [3, 1]); the most used outer letters
  *  move onto them (e t / i o), and their old spots on the edge get punctuation. */
 const SPLIT_LETTERS_5: [string[][], string[][]] = [
-    [["q", "w", "!", "r", "-"], ["a", "s", "d", "f", "g"], ["z", "x", "c", "v", "b"], ["e", "t"]],
-    [["y", "u", "/", ":", "p"], ["h", "j", "k", "l", "'"], ["n", "m", ",", ".", "?"], ["i", "o"]],
+    [["q", "w", ",", "r", "."], ["a", "s", "d", "f", "g"], ["z", "x", "c", "v", "b"], ["e", "t"]],
+    [["y", "u", "#", ":", "p"], ["h", "j", "k", "l", "'"], ["n", "m", "@", "/", "?"], ["i", "o"]],
 ];
 const SPLIT_SYMBOLS_5: [string[][], string[][]] = [
     [...SPLIT_SYMBOLS[0], ["+", "="]],
@@ -4734,7 +4734,7 @@ const SPLIT_ROLL_MS = 220, SPLIT_ROLL_MIN_MS = 15;
  *  in straight rows and columns).
  *    pushed to the rim: the 12 keys around the edge are the 12 hours (equal 30° slices) —
  *        left:  e 12 · r 1 · t 2 · g 3 · b 4 · v 5 · c 6 · x 7 · z 8 · a 9 · q 10 · w 11
- *        right: i 12 · o 1 · p 2 · ' 3 · ? 4 · . 5 · , 6 · m 7 · n 8 · h 9 · y 10 · u 11
+ *        right: i 12 · o 1 · p 2 · ' 3 · ? 4 · / 5 · @ 6 · m 7 · n 8 · h 9 · y 10 · u 11
  *    half tilt (between the centre and the rim — 15% to 95% when pushed sideways): leaning left = s / j, leaning right = f / l
  *    centred: d / k
  *  Keys are still kept as [row, col] of the 3×5 layouts below (those say which character is where). */
