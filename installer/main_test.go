@@ -117,3 +117,29 @@ func TestMissingBetterDiscordFolderDoesNotCreateFakeInstallation(t *testing.T) {
 		t.Fatal("unused plugin directory created")
 	}
 }
+
+func TestBetterDiscordEnablePreservesOtherPlugins(t *testing.T) {
+	directory := filepath.Join(t.TempDir(), "BetterDiscord", "plugins")
+	for _, channel := range []string{"stable", "ptb", "canary"} {
+		file := filepath.Join(filepath.Dir(directory), "data", channel, "plugins.json")
+		if err := writeFile(file, []byte(`{"OtherPlugin":true,"GamepadDebug":false,"HandheldControls":false}`), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := enableBetterDiscord(directory); err != nil {
+		t.Fatal(err)
+	}
+	for _, channel := range []string{"stable", "ptb", "canary"} {
+		data, err := os.ReadFile(filepath.Join(filepath.Dir(directory), "data", channel, "plugins.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var saved map[string]bool
+		if err := json.Unmarshal(data, &saved); err != nil {
+			t.Fatal(err)
+		}
+		if !saved["HandheldControls"] || !saved["OtherPlugin"] || saved["GamepadDebug"] {
+			t.Fatalf("unexpected plugin settings: %v", saved)
+		}
+	}
+}

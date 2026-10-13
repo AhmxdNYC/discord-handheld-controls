@@ -317,7 +317,8 @@ function opt<T = any>(key: string): T {
     return (v === undefined || v === null || v === "" ? OPT_DEFAULTS[key] : v) as T;
 }
 
-const VERSION = "v5.91";
+const VERSION = "v6.23";
+const brandHtml = `<a href="https://github.com/AhmxdNYC/discord-handheld-controls" target="_blank" rel="noopener noreferrer" aria-label="Handheld Controls on GitHub">Handheld × Controller</a>`;
 // Discord's own message sending (used only if pressing Enter in the box doesn't send)
 const MessageActions = findByPropsLazy("sendMessage", "editMessage");
 
@@ -352,9 +353,11 @@ const listIdOf = (el: Element) => el.getAttribute("data-list-id") ?? el.getAttri
 const listSel = (id: string) => { const v = id.replace(/["\\]/g, ""); return `[data-list-id="${v}"], [data-hh-list="${v}"]`; };
 const CHAT_LIST = listSel("chat-messages");
 const MENU_ITEM = '[role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"], [role="listbox"] [role="option"]';
+const NEW_JUMP = '[class*="unreadMentionsBar"]:not([aria-hidden="true"]), [class*="mentionsBar"][role="button"]:not([aria-hidden="true"]), [class*="unreadBar"]:not([aria-hidden="true"])';
 const FOCUSABLE = [
-    "button", "a[href]", 'input:not([type="hidden"])', "textarea", "select",
-    '[role="button"]', '[role="tab"]', '[role="option"]', '[role="switch"]', '[role="checkbox"]',
+    NEW_JUMP, '[data-hh-discovered]',
+    'label:has(input[type="checkbox"]), label:has(input[type="radio"])', "button", "a[href]", 'input:not([type="hidden"])', "textarea", "select",
+    '[role="button"]', '[role="tab"]', '[role="option"]', '[role="switch"]', '[role="checkbox"]', '[role="gridcell"]',
     '[role="radio"]', '[role="link"]', '[role="treeitem"]', '[role="slider"]', '[role="combobox"]',
     '[role="textbox"]', '[contenteditable="true"]', MENU_ITEM, '[tabindex="0"]', ROW_ANY,
 ].join(", ");
@@ -366,6 +369,7 @@ const LANDMARK = 'form, nav, aside, section, header, main, [role="tablist"], [ro
 let raf = 0;
 let frame = 0;
 let prevPressed: boolean[] = [];
+let navigationButtonsBlocked = false;
 let heldDir: Dir | null = null;
 let heldSince = 0;
 let lastRepeat = 0;
@@ -389,7 +393,7 @@ let helpEl: HTMLDivElement | null = null;
 let helpShownOnce = false;
 
 // ---------- basic helpers ----------
-const isOurs = (el: Element) => !!el.closest(".hh-ring, .hh-frame, .hh-help, .hh-toast, .hh-debug, .hh-kb, .hh-panel");
+const isOurs = (el: Element) => !!el.closest(".hh-ring, .hh-frame, .hh-help, .hh-toast, .hh-debug, .hh-kb, .hh-panel, #hh-input-recorder");
 const isVisible = (el: Element) => {
     const r = el.getBoundingClientRect();
     return r.width > 2 && r.height > 2 && r.bottom > 0 && r.right > 0 && r.top < window.innerHeight && r.left < window.innerWidth;
@@ -398,7 +402,9 @@ const center = (el: Element) => {
     const r = el.getBoundingClientRect();
     return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
 };
-const isDisabled = (el: Element) => (el as HTMLButtonElement).disabled === true || el.getAttribute("aria-disabled") === "true";
+const isDisabled = (el: Element) => (el as HTMLButtonElement).disabled === true || el.getAttribute("aria-disabled") === "true"
+    || !!el.closest('[inert], [aria-disabled="true"], fieldset[disabled]')
+    || (el.matches("label") && !!el.querySelector("input:disabled"));
 /** The open pop-up menu — the deepest one when a sub-menu ("Apps ›") is open on top of its parent. */
 /** (Searching Discord's whole page is the plugin's biggest cost, so the answer is kept for the rest of the frame;
  *  anything that opens / closes a menu resets it with `menuChanged()`.) */
@@ -434,9 +440,10 @@ function isOnTop(el: Element) {
     const r = el.getBoundingClientRect();
     const x = Math.min(Math.max(r.left + Math.min(r.width / 2, 24), 1), window.innerWidth - 2);
     const y = Math.min(Math.max(r.top + Math.min(r.height / 2, 24), 1), window.innerHeight - 2);
-    const hit = document.elementFromPoint(x, y);
+    let hit = document.elementFromPoint(x, y);
+    if (hit && isOurs(hit)) hit = document.elementsFromPoint(x, y).find(node => !isOurs(node)) ?? null;
     if (!hit) return false;
-    if (hit === el || el.contains(hit) || isOurs(hit)) return true;
+    if (hit === el || el.contains(hit)) return true;
     // a text box with its grey "Message @someone" placeholder drawn on top of it still counts as visible
     if (el.matches(TEXT_ENTRY)) {
         let wrap: Element | null = el;
@@ -480,21 +487,63 @@ function isCloseButton(el: Element) {
     return !!box && box.children.length <= 3 && /^esc$/i.test((box.textContent ?? "").replace(text, "").trim());
 }
 
+/** Discover Discord controls without relying on theme class names or English labels.
+ * React delegates events, so onclick alone misses its otherwise unmarked buttons. */
+let discoveredAt = -Infinity;
+const discovered = new Set<Element>();
+function discoverControls() {
+    if (performance.now() - discoveredAt < 500) return;
+    discoveredAt = performance.now();
+    const next = new Set<Element>();
+    for (const el of document.querySelectorAll<HTMLElement>("*")) {
+        // Cheap event check first: avoid selector walks and layout reads for ordinary text/layout nodes.
+        const key = Object.keys(el).find(k => k.startsWith("__reactProps"));
+        const props = key ? (el as any)[key] : null;
+        const click = typeof el.onclick === "function" || typeof props?.onClick === "function";
+        const pointer = el.style?.cursor === "pointer";
+        if (!click && !pointer) continue;
+        if (isOurs(el) || el.closest('.hh-brand, [inert], [aria-hidden="true"], [aria-disabled="true"], fieldset[disabled], [role="tooltip"]')
+            || isDisabled(el) || el.matches('[role="separator"], html, body')) continue;
+        if (el.matches(FOCUSABLE.replace(', [data-hh-discovered]', ''))) continue;
+        if (!click && el.parentElement && getComputedStyle(el.parentElement).cursor === "pointer") continue;
+        if (!isVisible(el) || !isOnTop(el)) continue;
+        // A wrapper for an existing target is not another navigation stop.
+        const existing = [...el.querySelectorAll(FOCUSABLE)].some(control => {
+            const target = controlTarget(control);
+            return target !== el && isVisible(target) && isOnTop(target);
+        });
+        if (existing && !el.matches(NEW_JUMP)) continue;
+        next.add(el);
+    }
+    for (const el of discovered) if (!next.has(el)) el.removeAttribute("data-hh-discovered");
+    discovered.clear();
+    for (const el of next) { el.setAttribute("data-hh-discovered", ""); discovered.add(el); }
+}
+
+/** React Aria renders switches as visually hidden inputs inside the visible, clickable label. */
+function controlTarget(el: Element): Element {
+    if (!el.matches('input[type="checkbox"], input[type="radio"]')) return el;
+    const label = el.closest("label") ?? (el.id ? [...document.querySelectorAll("label[for]")].find(l => l.getAttribute("for") === el.id) : null);
+    return label && isVisible(label) ? label : el;
+}
+
 /** Pressable things on top of the screen. Whole lists aren't items; neither are the little buttons inside a row. */
 function itemsOnTop(within?: Element | null): Element[] {
+    discoverControls();
     const root: ParentNode = within ?? document;
     // (drag handles like "Resize Sidebar" are focusable but nothing to select — and they'd glue whole columns together)
-    const raw = [...root.querySelectorAll(FOCUSABLE)].filter(el => !isOurs(el) && !isDisabled(el) && isVisible(el) && !el.matches('[role="separator"]'));
+    const raw = [...new Set([...root.querySelectorAll(FOCUSABLE)].map(controlTarget))].filter(el => !isOurs(el) && !isDisabled(el) && isVisible(el) && !el.matches('[role="separator"]'));
     const set = new Set(raw);
     const out: Element[] = [];
     for (const el of raw) {
+        const tile = expressionTile(el);
+        if (tile && tile !== el) continue; // the GIF's favorite star is not a separate navigation stop
         const row = el.parentElement?.closest(ROW_ANY);
         if (row && set.has(row)) continue;
         if (!el.matches(ROW_ANY) && !el.matches(TEXT_ENTRY)) {
             const inner = el.querySelector(FOCUSABLE);
-            if (inner && set.has(inner)) continue; // a container, not an item
+            if (!tile && inner && set.has(inner) && controlTarget(inner) !== el) continue; // a container, not an item
         }
-        if (isCloseButton(el)) continue;
         if (!isOnTop(el)) continue;
         out.push(el);
     }
@@ -578,6 +627,7 @@ function tagLists(force = false) {
  *  2) The account panel.
  *  3) Otherwise the nearest scroll area / landmark, but never something bigger than ~half the screen. */
 function sectionOf(el: Element): Element {
+    if (el.matches(NEW_JUMP)) return el;
     // (anything inside a list's row belongs to that list too — a member's booster badge is part of the member list)
     const rowId = (el.closest("[data-list-item-id]") ?? el).getAttribute("data-list-item-id");
     if (rowId && rowId.includes("___") && !rowId.startsWith("NO_LIST")) {
@@ -643,13 +693,13 @@ function listSections(): Element[] {
     for (const el of itemsOnTop()) out.add(sectionOf(el));
     const secs = [...out].filter(s => {
         const r = s.getBoundingClientRect();
-        return r.width * r.height > 1500;
+        return s.matches(NEW_JUMP) || r.width * r.height > 1500;
     });
     // settings: the whole options page is ONE section (no sections inside sections)
     {
         const merged: Element[] = [];
         for (const sec of secs) { const m = widen(sec); if (!merged.includes(m)) merged.push(m); }
-        secs.length = 0; secs.push(...merged.filter(m => !merged.some(o => o !== m && o.contains(m))));
+        secs.length = 0; secs.push(...merged.filter(m => m.matches(NEW_JUMP) || !merged.some(o => o !== m && o.contains(m))));
     }
     // the settings / window X is a section of its own: move onto it and press A to close
     for (const c of closeButtons()) if (!secs.includes(c)) secs.push(c);
@@ -706,6 +756,7 @@ function chatPane(): Element | null {
 }
 /** The big section a smaller part belongs to (a settings page or the channel view), or the part itself. */
 function widen(sec: Element): Element {
+    if (sec.matches(NEW_JUMP)) return sec;
     if (isCloseSection(sec)) return sec;
     const side = settingsSidebar();
     if (side) return sec.contains(side) || side.contains(sec) ? sec : settingsPane(sec, side);
@@ -838,7 +889,10 @@ function preferredItem(sec: Element, items: Element[]): Element | null {
 function entryItemFor(sec: Element): Element | null {
     // a pop-out: everything you could tap in it (a profile card's marked buttons alone would start you on its message box)
     const asWindow = !!sec.closest('[role="dialog"], [aria-modal="true"]') && !settingsSidebar() && !listFillsWindow(sec);
-    const items = asWindow ? windowPressables(sec) : listRows(sec) ?? itemsOnTop(sec);
+    const all = asWindow ? windowPressables(sec) : listRows(sec) ?? itemsOnTop(sec);
+    // Close is reachable, but entering a window should prefer one of its ordinary actions.
+    const actions = all.filter(el => !isCloseButton(el));
+    const items = actions.length ? actions : all;
     if (!items.length) return null;
     const pick = preferredItem(sec, items);
     if (pick) return pick;
@@ -875,13 +929,14 @@ function defaultSection(): Element | null {
 
 /** Nearest element in a direction — edge-to-edge distance so big and small things compare fairly. */
 function nearestInDirection(from: Element, candidates: Element[], dir: Dir, edgesOnly = false): Element | null {
-    const a = from.getBoundingClientRect();
+    const a = edgesOnly ? visibleOutlineRect(from) : from.getBoundingClientRect();
     const ac = { x: a.left + a.width / 2, y: a.top + a.height / 2 };
     let best: Element | null = null;
     let bestScore = Infinity;
     for (const el of candidates) {
-        if (el === from || el.contains(from) || from.contains(el)) continue;
-        const b = el.getBoundingClientRect();
+        if (el === from || ((el.contains(from) || from.contains(el)) && !el.matches(NEW_JUMP) && !from.matches(NEW_JUMP))) continue;
+        const b = edgesOnly ? visibleOutlineRect(el) : el.getBoundingClientRect();
+        if (!b.width || !b.height) continue;
         const bc = { x: b.left + b.width / 2, y: b.top + b.height / 2 };
         const ahead = dir === "down" ? bc.y > ac.y + 2 : dir === "up" ? bc.y < ac.y - 2 : dir === "right" ? bc.x > ac.x + 2 : bc.x < ac.x - 2;
         if (!ahead) continue;
@@ -944,6 +999,14 @@ function markFast() {
 }
 
 function setItem(el: Element | null) {
+    el = el && controlTarget(expressionTile(el) ?? el);
+    if (el && nativePickerLock) {
+        const layer = nativeExpressionPicker();
+        if (layer?.contains(el)) {
+            nativePickerLock.results = !!expressionTile(el);
+            if (nativePickerLock.results) nativePickerLock.index = Math.max(0, nativeExpressionResults(layer).indexOf(el as HTMLElement));
+        }
+    }
     // inside pop-up menus everything is instant: no gliding ring, no smooth scrolling
     const inMenu = !!el && !!el.closest('[role="menu"]');
     const fast = markFast() || inMenu;
@@ -1008,6 +1071,7 @@ function lockInto(sec: Element | null, quiet = false) {
  *  you've already moved. */
 function enterSettingsList() {
     const go = () => {
+        if (!controllerActive) return;
         const side = settingsSidebar() ?? defaultSection();
         if (!side) return;
         lockInto(side, true);
@@ -1109,6 +1173,11 @@ function backOutOfTyping() {
 function moveSections(dir: Dir) {
     const secs = listSections();
     if (!secs.length) return;
+    if (!alive(section)) {
+        const start = defaultSection() ?? secs[0];
+        highlightSection(nearestInDirection(start, secs, dir, true) ?? start);
+        return;
+    }
     if (!alive(section) || !secs.includes(section)) {
         // the highlighted area isn't a known section any more: continue from where it was instead of getting stuck
         const from = alive(section) ? section : null;
@@ -1244,7 +1313,7 @@ function windowPressables(win: Element): Element[] {
     for (let y = top + 10; y < bottom - 4; y += 22)
         for (let x = left + 12; x < right - 4; x += 26) {
             const p = pressableAt(document.elementFromPoint(x, y), win);
-            if (p && !isCloseButton(p) && p.getBoundingClientRect().height < 160) set.add(p);
+            if (p && p.getBoundingClientRect().height < 160) set.add(p);
         }
     // a list box (a card's role pills) isn't a stop of its own when you can reach what's inside it
     for (const e of [...set]) if (e.matches(`${LIST}, [role="list"], [role="listbox"]`) && [...set].some(o => o !== e && e.contains(o))) set.delete(e);
@@ -1262,7 +1331,7 @@ function scanSideways(from: Element, sec: Element, dir: "left" | "right"): Eleme
     const step = dir === "right" ? 6 : -6;
     for (let x = dir === "right" ? a.right + 3 : a.left - 3, i = 0; i < 150 && x > sr.left && x < sr.right; x += step, i++) {
         const t = pressableAt(document.elementFromPoint(x, y), sec);
-        if (t && t !== from && !t.contains(from) && !from.contains(t) && !isCloseButton(t)) return t;
+        if (t && t !== from && !t.contains(from) && !from.contains(t)) return t;
     }
     return null;
 }
@@ -1270,6 +1339,15 @@ function scanSideways(from: Element, sec: Element, dir: "left" | "right"): Eleme
 function moveInsideCore(dir: Dir) {
     if (!alive(section)) return unlock();
     const pane = section;
+    const composer = alive(focused) ? focused.closest("form") : null;
+    if (composer && pane.contains(composer) && composer.querySelector('[role="textbox"][contenteditable="true"]')) {
+        const before = focused;
+        moveInWindow(composer, dir);
+        if (focused !== before || dir !== "up") return;
+        const previous = nearestInDirection(focused!, itemsOnTop(pane).filter(el => !composer.contains(el)), "up");
+        if (previous) setItem(previous);
+        return;
+    }
     // settings pages: plain free movement over the whole page (already works well); the channel view: part by part
     if (settingsSidebar() || !isMerged(pane) || !alive(focused) || !pane.contains(focused)) return moveIn(pane, dir);
     const part = partOf(focused, pane);
@@ -1282,7 +1360,7 @@ function moveInsideCore(dir: Dir) {
     if (focused !== before || (sc && sc.scrollTop !== top) || section !== pane) return;
     const fr = focused.getBoundingClientRect();
     const others = itemsOnTop(pane).filter(el => {
-        if (part.contains(el) || isCloseButton(el)) return false;
+        if (part.contains(el)) return false;
         const r = el.getBoundingClientRect();
         // up / down: only things really above / below you — past your edge, not just past your middle (a very tall
         // message's middle is far down) — and not off to the side (the member list isn't "below" the last message)
@@ -1429,7 +1507,10 @@ function moveIn(sec: Element, dir: Dir) {
             if (isChat) {
                 if (step > 0) {
                     const box = [...document.querySelectorAll('[role="textbox"][contenteditable="true"]')].find(b => isVisible(b) && !b.closest('[role="dialog"]'));
-                    if (box) setItem(box);
+                    const composer = box?.closest("form") ?? sec.querySelector("form");
+                    const controls = composer ? itemsOnTop(composer) : [];
+                    const next = nearestInDirection(from, controls, "down");
+                    if (next || box) setItem(next ?? box!);
                 }
                 return;
             }
@@ -1702,11 +1783,13 @@ const isSettingsPage = (el: Element) => !!el.closest('[data-list-id^="settings-s
     && el.matches('[data-list-item-id^="settings-sidebar"]');
 function pageList(): Element | null {
     for (const tl of document.querySelectorAll('[role="tablist"]')) {
-        if (tl.querySelectorAll('[role="tab"]').length < 6 || !isVisible(tl)) continue;
-        const r = tl.getBoundingClientRect();
-        if (r.height < r.width) continue;
-        const first = [...tl.querySelectorAll('[role="tab"]')].find(isVisible);
-        if (first && isOnTop(first)) return tl;
+        if (!isVisible(tl)) continue;
+        const tabs = [...tl.querySelectorAll('[role="tab"]')].filter(isVisible);
+        if (tabs.length < 2) continue;
+        const a = tabs[0].getBoundingClientRect(), b = tabs[1].getBoundingClientRect();
+        const vertical = Math.abs(b.top - a.top) > Math.abs(b.left - a.left);
+        const controlsPage = tabs.some(tab => document.getElementById(tab.getAttribute("aria-controls") ?? "")?.matches('[role="tabpanel"]'));
+        if (vertical && (controlsPage || tabs.length >= 6) && isOnTop(tabs[0])) return tl;
     }
     return null;
 }
@@ -1745,6 +1828,35 @@ function fullScreenPage(): boolean {
     return big;
 }
 
+/** Jump into the next indicated server, rather than leaving focus on the floating scroll badge. */
+function jumpToNew(bar: HTMLElement) {
+    if (!bar.matches('[class*="unreadMentionsBar"]')) { bar.click(); return; }
+    const list = bar.closest('[data-list-id="guildsnav"]') ?? document.querySelector('[data-list-id="guildsnav"]');
+    const br = bar.getBoundingClientRect(), lr = list?.getBoundingClientRect();
+    const down = !lr || br.top + br.height / 2 > lr.top + lr.height / 2;
+    const reads = findStore("GuildReadStateStore");
+    const rows = list ? [...list.querySelectorAll<HTMLElement>(ROW.server)] : [];
+    const ahead = rows.filter(row => {
+        const r = row.getBoundingClientRect();
+        return down ? r.top >= br.bottom : r.bottom <= br.top;
+    });
+    const mentions = (row: HTMLElement) => {
+        const id = (row.getAttribute("data-list-item-id") ?? "").split("___")[1];
+        const badge = row.closest('[class*="listItem"]')?.querySelector('[class*="numberBadge"]');
+        return (reads?.getMentionCount?.(id) ?? 0) > 0 || Number(badge?.textContent) > 0;
+    };
+    const marked = ahead.filter(mentions);
+    const candidates = marked.length ? marked : ahead.filter(row => reads?.hasUnread?.((row.getAttribute("data-list-item-id") ?? "").split("___")[1]));
+    candidates.sort((a, b) => down ? a.getBoundingClientRect().top - b.getBoundingClientRect().top : b.getBoundingClientRect().bottom - a.getBoundingClientRect().bottom);
+    const target = candidates[0];
+    bar.click();
+    if (!target) return; // retain Discord's native jump for other unread-bar variants
+    target.click();
+    const sec = sectionOf(target);
+    section = sec; sectionKey = keyOf(sec); mode = "inside";
+    setItem(target);
+}
+
 function pressA() {
     menuChanged();
     const menu = openMenu();
@@ -1759,13 +1871,24 @@ function pressA() {
         return;
     }
     if (mode === "sections") {
-        if (!alive(section)) { debugNote("A: no section, picking default"); return highlightSection(defaultSection()); }
+        if (!alive(section)) { debugNote("A: enter default section"); return lockInto(defaultSection()); }
+        if (section.matches(NEW_JUMP)) {
+            jumpToNew(section as HTMLElement);
+            bumpChecks();
+            return;
+        }
         if (isCloseSection(section)) { debugNote("A: close"); (section as HTMLElement).click(); return; }
         lockInto(section);
         debugNote(`A: lock ${describe(section).slice(0, 60)} → item ${focused ? describe(focused).slice(0, 50) : "NONE"}`);
         return;
     }
     if (!alive(focused)) return moveInside("down");
+    if (isCloseButton(focused)) {
+        (focused as HTMLElement).click();
+        menuChanged();
+        restoreSoon();
+        return;
+    }
 
     // a message: A goes inside it (name, avatar, reactions, links, images, buttons); X opens its menu
     if (focused.matches(ROW.message)) return enterMessage(focused);
@@ -1883,6 +2006,7 @@ function afterMenuChoice(item: Element) {
     if (!isTypeChoice(item)) return;
     let tries = 0;
     const go = () => {
+        if (!controllerActive) return;
         tries++;
         if (openMenu() && tries < 12) return void setTimeout(go, 60); // wait for the menu to close
         // Discord usually focuses the box itself; if not, find it (an inline edit box first, then the message box)
@@ -1907,7 +2031,7 @@ function afterMenuChoice(item: Element) {
 }
 // tapping Reply with a finger does the same
 const onMenuClickCapture = (e: MouseEvent) => {
-    if (!e.isTrusted) return; // our own A press is handled in pressA
+    if (!controllerActive || !e.isTrusted) return; // our own A press is handled in pressA
     const item = (e.target as Element)?.closest?.(MENU_ITEM);
     if (item && opt("onScreenKeyboard")) afterMenuChoice(item);
 };
@@ -2077,6 +2201,7 @@ function openSettings() {
 // ---------- back buttons: shortcuts ----------
 // Steam doesn't hand the back buttons to apps, so they're mapped (in Steam) to spare keyboard keys, caught here.
 function onBackKey(e: KeyboardEvent) {
+    if (!controllerActive) return;
     const slot = BACK_KEYS.findIndex(ks => ks.includes(e.key) || ks.includes(e.code));
     if (slot < 0 || e.ctrlKey || e.altKey || e.metaKey) return;
     e.preventDefault(); e.stopPropagation();
@@ -2142,13 +2267,32 @@ function runBackAction(a: string, name = "") {
 // and the guide show their own; it fades away when the controller hasn't been used for a while.
 let hintsEl: HTMLDivElement | null = null;
 type Hint = [Badge[], string];
+/** The Menu shortcut is Send only while the selected chat owns a pending message or attachment. */
+function composerSendContext(): { box: HTMLElement; attachment: boolean; text: boolean; } | null {
+    if (openMenu() || nativeExpressionPicker() || overlayCount() || settingsOpen() || adjustMode) return null;
+    const box = document.querySelector<HTMLElement>('[class*="baseLayer"] form [role="textbox"][contenteditable="true"]');
+    const form = box?.closest("form");
+    if (!box || !form || !(alive(section) && section.contains(form) || alive(focused) && form.contains(focused))) return null;
+    const attachment = !!form.querySelector('[data-list-item-id^="attachments___"]');
+    const text = !!(box.innerText ?? box.textContent ?? "").replace(/\uFEFF/g, "").trim();
+    return attachment || text ? { box, attachment, text } : null;
+}
 function hintItems(): Hint[] {
+    const items = baseHintItems();
+    const send = composerSendContext();
+    if (!send) return items;
+    const label = send.attachment ? send.text ? "send message + attachment" : "send attachment" : "send message";
+    return [[["MENU"], label], ...items.filter(([buttons]) => !buttons.includes("MENU"))];
+}
+function baseHintItems(): Hint[] {
+    if (mode === "sections" && alive(section) && section!.matches(NEW_JUMP)) return [[["DPAD"], "pick area"], [["A"], "jump to new"], [["B"], "back"]];
     if (adjustMode) return [[["DPAD"], "◀▶ change"], [["L"], "hold: faster"], [["LB", "RB"], "next / previous"], [["B"], "done"]];
     const menu = openMenu();
     if (menu) {
         const more = alive(focused) && menu.contains(focused) && hasSubmenu(focused!);
         return [[["DPAD"], "move"], [["A"], more ? "open ▶" : "select"], [["B"], "close"]];
     }
+    if (nativeExpressionPicker()) return [[["DPAD"], "move"], [["A"], "select"], [["LB", "RB"], "picker tabs"], [["LT", "RT"], "scroll picker"], [["Y"], "picker controls"], [["B"], "close"]];
     if (typingMode) return [[["A"], "keyboard"], [["B"], "stop typing"], [["Y"], "areas"]];
     if (mode === "sections") return [[["DPAD"], "pick area"], [["A"], "go in"], [["LB", "RB"], "servers"], [["LT", "RT"], "channels"], [["R3"], "sliders"], [["VIEW"], "guide"], [["MENU"], "settings"]];
     if (settingsOpen()) return [[["DPAD"], "move"], [["A"], "open"], [["B"], "back"]];
@@ -2157,8 +2301,7 @@ function hintItems(): Hint[] {
     if (alive(focused) && focused!.matches(TEXT_ENTRY)) return [[["A"], "type"], [["DPAD"], "move"], [["Y"], "areas"]];
     return [[["DPAD"], "move"], [["A"], "open"], [["X"], "options"], [["Y"], "areas"], [["R3"], "sliders"], [["B"], "back"]];
 }
-/** The selected item's own little tag: what A (and X) do for it, at its right edge. */
-let tagEl: HTMLDivElement | null = null;
+/** Contextual actions appear in the shared controls row. */
 /** Does it really have its own menu? Found out by trying: the first time you rest on a kind of item, a hidden
  *  right-click — if a menu opens it's closed again at once (and never shown); the answer is remembered for every item
  *  of that kind (also across restarts). Text boxes are never tried (their menu is the system's). */
@@ -2181,6 +2324,7 @@ function saveCtx() {
 }
 let probeStarted = 0;
 function probeCtx(el: Element) {
+    if (!controllerActive) return;
     if (probing && performance.now() - probeStarted > 2000) { probing = false; document.documentElement.removeAttribute("data-hh-probing"); } // (watchdog)
     if (probing || openMenu() || !el.isConnected) return;
     probeStarted = performance.now();
@@ -2190,16 +2334,18 @@ function probeCtx(el: Element) {
     try { rightClick(el); } catch { probing = false; document.documentElement.removeAttribute("data-hh-probing"); return; }
     const t0 = performance.now();
     const done = (found: boolean) => {
+        if (!controllerActive) { probing = false; document.documentElement.removeAttribute("data-hh-probing"); return; }
         ctxKnown.set(sig, found); saveCtx();
         const m = openMenu();
         if (m) pressKey("Escape", m);
         setTimeout(() => {
-            const still = openMenu();
+            const still = controllerActive ? openMenu() : null;
             if (still) pressKey("Escape", still);
             setTimeout(() => { probing = false; document.documentElement.removeAttribute("data-hh-probing"); }, 60);
         }, 80);
     };
     const check = () => {
+        if (!controllerActive) { probing = false; document.documentElement.removeAttribute("data-hh-probing"); return; }
         if (openMenu()) return done(true);
         if (performance.now() - t0 > 500) return done(false);
         requestAnimationFrame(check);
@@ -2213,6 +2359,9 @@ function focusTag(el: Element): Hint[] | null {
     return ctx ? [...base, [["X"], "menu"]] : base;
 }
 function baseTag(el: Element): Hint[] | null {
+    if (el.hasAttribute("data-hh-send")) return [[["A"], "send"]];
+    if (el.hasAttribute("data-hh-discovered")) return [[["A"], "press"]];
+    if (el.matches(NEW_JUMP)) return [[["A"], "jump to new"]];
     if (el.matches(ROW.server)) return [[["A"], "open"], [["X"], "menu"]];
     if (el.matches(ROW.channel)) return [[["A"], "open"], [["X"], "menu"]];
     if (el.matches(ROW.message)) return [[["A"], "inside"], [["X"], "react"]];
@@ -2231,31 +2380,15 @@ function baseTag(el: Element): Hint[] | null {
     if (el.matches('a, button, [role="button"], [role="link"], [role="menuitem"], [role="option"], [role="radio"]')) return [[["A"], "press"]];
     return null;
 }
-function updateTag(hide: boolean) {
+function updateContextActions(hide: boolean) {
     const el = !hide && mode === "inside" && !typingMode && !openMenu() && !probing && alive(focused) ? focused! : null;
     // (a kind of item not tried yet: once you've rested on it a moment, find out whether it has a menu)
     if (el && !el.matches(ROW_ANY + ", " + TEXT_ENTRY) && !ctxKnown.has(ctxSig(el))) {
         if (probeEl !== el) { probeEl = el; probeAt = performance.now(); }
         else if (performance.now() - probeAt > 450) probeCtx(el);
     }
-    const items = el ? focusTag(el) : null;
-    if (!el || !items) { if (tagEl && !tagEl.classList.contains("off")) tagEl.classList.add("off"); return; }
-    if (!tagEl) { tagEl = document.createElement("div"); tagEl.className = "hh-hints hh-tag off"; document.body.append(tagEl); }
-    const html = items.map(([bs, t]) => `<span class="hh-hint">${bs.map(badgeHtml).join("")}<span>${t}</span></span>`).join("");
-    if (tagEl.innerHTML !== html) tagEl.innerHTML = html;
-    const r = el.getBoundingClientRect(), w = tagEl.offsetWidth, h = tagEl.offsetHeight;
-    // inside the item's right end when it's wide enough; a server icon: just to its right; other small buttons
-    // (mic / deafen / settings…): right above them
-    const inside = r.width > w + 60, beside = !inside && !!el.closest(ROW.server);
-    let x = inside ? r.right - w - 8 : beside ? r.right + 8 : r.left + r.width / 2 - w / 2;
-    let y = inside || beside ? r.top + (Math.min(r.height, 60) - h) / 2 : r.top - h - 6;
-    if (!inside && !beside && y < 4) y = r.bottom + 6; // (no room above: below)
-    x = Math.max(4, Math.min(window.innerWidth - w - 4, x));
-    y = Math.max(4, Math.min(window.innerHeight - h - 4, y));
-    const t = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
-    if (tagEl.style.transform !== t) tagEl.style.transform = t;
-    if (tagEl.classList.contains("off")) tagEl.classList.remove("off");
 }
+
 /** The widest set of top-bar hints (picking an area), measured once per button style. */
 let topHintsW = 0, topHintsFor = "";
 function topHintsWidth(): number {
@@ -2289,9 +2422,49 @@ function shiftTitle(on: boolean) {
         if (!title!.hasAttribute("data-hh-title-shift")) title!.setAttribute("data-hh-title-shift", "");
     } else for (const t of document.querySelectorAll("[data-hh-title-shift]")) t.removeAttribute("data-hh-title-shift");
 }
+let composerSendEl: HTMLButtonElement | null = null;
+/** One visible action for text, attachments, or both, placed in Discord's own composer controls. */
+function updateComposerSend() {
+    const box = document.querySelector<HTMLElement>('[class*="baseLayer"] form [role="textbox"][contenteditable="true"]');
+    const form = box?.closest("form");
+    const content = (box?.innerText ?? box?.textContent ?? "").replace(/\uFEFF/g, "").trim();
+    const pending = !!form?.querySelector('[data-list-item-id^="attachments___"]');
+    const uploads = form?.querySelector<HTMLElement>('[data-list-id="attachments"]');
+    if (uploads && box) {
+        const parent = uploads.parentElement;
+        const cap = parent ? parseFloat(getComputedStyle(parent).maxHeight) : NaN;
+        const line = box.closest('[class*="inner"]')?.getBoundingClientRect().height ?? box.getBoundingClientRect().height;
+        const space = Number.isFinite(cap) ? Math.max(0, cap - line) : window.innerHeight;
+        const height = `${Math.floor(Math.min(window.innerHeight * .25, space))}px`;
+        if (uploads.style.getPropertyValue("--hh-upload-height") !== height) uploads.style.setProperty("--hh-upload-height", height);
+    }
+    const nativeSend = form?.querySelector('[aria-label="Send Message"], [aria-label="Send"]');
+    if (!box || !form || (!content && !pending) || nativeSend) {
+        composerSendEl?.remove(); composerSendEl = null; return;
+    }
+    const controls = box.closest('[class*="inner"]')?.querySelector('[class*="buttons"]')
+        ?? form.querySelector('[class*="buttons"]');
+    if (!controls) return;
+    if (!composerSendEl || !composerSendEl.isConnected) {
+        composerSendEl = document.createElement("button");
+        composerSendEl.type = "button";
+        composerSendEl.className = "hh-composer-send";
+        composerSendEl.setAttribute("data-hh-send", "");
+        composerSendEl.setAttribute("aria-label", "Send message or attachment");
+        composerSendEl.title = "Send message or attachment";
+        composerSendEl.innerHTML = '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M3 3.5a1 1 0 0 1 1.4-.92l17 8.5a1 1 0 0 1 0 1.84l-17 8.5A1 1 0 0 1 3 20.5v-6.7l10-1.8-10-1.8V3.5Z"/></svg>';
+        composerSendEl.onclick = () => {
+            const target = composerSendEl?.closest("form")?.querySelector<HTMLElement>('[role="textbox"][contenteditable="true"]');
+            if (target) kbSend(target);
+        };
+    }
+    if (composerSendEl.parentElement !== controls) controls.append(composerSendEl);
+}
+
 function updateHints() {
+    updateComposerSend();
     const hide = !opt("showHints") || !!kbEl || !!panelEl || !!helpEl || !!calibEl || performance.now() - lastPadUse > 20000;
-    updateTag(hide);
+    updateContextActions(hide);
     if (hide) { if (hintsEl && !hintsEl.classList.contains("off")) hintsEl.classList.add("off"); shiftTitle(false); return; }
     markButtons();
     if (!hintsEl) {
@@ -2300,9 +2473,11 @@ function updateHints() {
         document.body.append(hintsEl);
         markMenuStyle();
     }
-    // (what the selected item's own tag already says isn't repeated here)
-    const tagged = mode === "inside" && !typingMode && !openMenu() && alive(focused) && !!focusTag(focused!);
-    const html = hintItems().filter(([bs]) => !tagged || !bs.some(b => b === "A" || b === "X")).map(([bs, t]) => `<span class="hh-hint">${bs.map(badgeHtml).join("")}<span>${t}</span></span>`).join("");
+    const actions = mode === "inside" && !typingMode && !adjustMode && !openMenu() && alive(focused)
+        ? focusTag(focused!) : null;
+    const replaced = new Set(actions?.flatMap(([bs]) => bs) ?? []);
+    const items = actions ? [...actions, ...hintItems().filter(([bs]) => !bs.some(b => replaced.has(b)))] : hintItems();
+    const html = items.map(([bs, t]) => `<span class="hh-hint">${bs.map(badgeHtml).join("")}<span>${t}</span></span>`).join("");
     let rebuilt = false;
     if (hintsEl.dataset.html !== html) { hintsEl.dataset.html = html; hintsEl.innerHTML = html; rebuilt = true; }
     // above the message box, on the right (anywhere else: the bottom-right corner); while a side menu is open on the
@@ -2501,6 +2676,7 @@ function toggleDebug() {
 let padCardEl: HTMLDivElement | null = null, padCardTimer = 0;
 const padName = (id: string) => id.replace(/\s*\((?:STANDARD GAMEPAD|Vendor)[^)]*\)\s*/gi, " ").replace(/^Microsoft\s+/i, "").replace(/\s+/g, " ").trim() || "Controller";
 function showPadCard(pad: Gamepad, connected: boolean) {
+    if (!controllerActive) return;
     if (/^HH Fake/.test(pad.id)) return; // (test controller)
     padCardEl?.remove();
     padCardEl = document.createElement("div");
@@ -2519,6 +2695,7 @@ const onPadDisconnected = (e: GamepadEvent) => showPadCard(e.gamepad, false);
 /** "Message sent" card (same style as the controller card), with the start of the message. */
 let sentCardEl: HTMLDivElement | null = null, sentCardTimer = 0;
 function showSentCard(text: string) {
+    if (!controllerActive) return;
     sentCardEl?.remove();
     sentCardEl = document.createElement("div");
     sentCardEl.className = "hh-padcard hh-sentcard";
@@ -2550,6 +2727,7 @@ const onReplyChange = () => setTimeout(markReplyTarget, 50);
 let toastEl: HTMLDivElement | null = null;
 let toastTimer = 0;
 function toast(text: string, ms = 1400) {
+    if (!controllerActive) return;
     if (!toastEl) {
         toastEl = document.createElement("div");
         toastEl.className = "hh-toast";
@@ -2578,6 +2756,8 @@ function restore() {
 /** Go back to where you were once a closing menu is really gone (while it closes, it can still cover the screen). */
 function restoreSoon(tries = 0) {
     setTimeout(() => {
+        const picker = nativeExpressionPicker();
+        if (picker && nativePickerLock) { keepNativeExpressionFocus(picker); return; }
         if (openMenu()) return; // another menu opened meanwhile: that one owns the selection now
         const s = returnStack[returnStack.length - 1];
         const stillCovered = s && alive(s.focused) ? !isOnTop(s.focused) : !defaultSection();
@@ -2678,6 +2858,12 @@ function watchLayers() {
         }
     }
     lastMenu = menu;
+    const expression = nativeExpressionPicker();
+    if (!menu && expression && nativePickerLock) {
+        keepNativeExpressionFocus(expression);
+        lastOverlays = overlayCount();
+        return;
+    }
     if (menu || (frame % 15 !== 0 && performance.now() - lastBgCheck > 50)) return; // (dialogs / settings: ~4–8 checks a second while active, and on each background check)
 
     // Discord rebuilds lists while you scroll: if our list/row got swapped out, quietly find it again (never jump away)
@@ -2719,7 +2905,7 @@ function watchLayers() {
 // ---------- on-screen UI ----------
 const lastPlaced = new WeakMap<HTMLElement, string>();
 function place(el: HTMLElement, r: DOMRect | null, pad = 0) {
-    const key = !r || r.width === 0
+    const key = !r || r.width === 0 || r.height === 0
         ? "hidden"
         : `${Math.round(r.left - pad)},${Math.round(r.top - pad)},${Math.round(r.width + pad * 2)},${Math.round(r.height + pad * 2)}`;
     if (lastPlaced.get(el) === key) return;
@@ -2750,11 +2936,48 @@ function clipTo(r: DOMRect, area: Element | null) {
     return bottom > top ? new DOMRect(r.left, top, r.width, bottom - top) : new DOMRect(0, 0, 0, 0);
 }
 
+/** Match the part Discord actually draws, including nested horizontal and vertical clipping. */
+function visibleOutlineRect(el: Element, pad = 0, clipFrom: Element | null = el.parentElement): DOMRect {
+    const r = el.getBoundingClientRect();
+    let left = Math.max(0, r.left - pad), top = Math.max(0, r.top - pad);
+    let right = Math.min(window.innerWidth, r.right + pad), bottom = Math.min(window.innerHeight, r.bottom + pad);
+    for (let n = clipFrom; n && n !== document.body; n = n.parentElement) {
+        const st = getComputedStyle(n), b = n.getBoundingClientRect();
+        if (/^(hidden|clip|auto|scroll)$/.test(st.overflowX)) { left = Math.max(left, b.left); right = Math.min(right, b.right); }
+        if (/^(hidden|clip|auto|scroll)$/.test(st.overflowY)) { top = Math.max(top, b.top); bottom = Math.min(bottom, b.bottom); }
+    }
+    return new DOMRect(left, top, Math.max(0, right - left), Math.max(0, bottom - top));
+}
+let outlinePeers: Element[] = [], outlinePeersAt = -Infinity;
+/** Floating peer panels can cover a section even when its DOM rectangle extends behind them. */
+function visibleSectionRect(el: Element): DOMRect {
+    let r = visibleOutlineRect(el);
+    if (performance.now() - outlinePeersAt > 250) { outlinePeers = listSections(); outlinePeersAt = performance.now(); }
+    for (const peer of outlinePeers) {
+        if (!peer.isConnected || peer === el || peer.contains(el) || el.contains(peer)) continue;
+        const b = visibleOutlineRect(peer);
+        const left = Math.max(r.left, b.left), right = Math.min(r.right, b.right);
+        const top = Math.max(r.top, b.top), bottom = Math.min(r.bottom, b.bottom);
+        if (right <= left || bottom <= top) continue;
+        const hit = document.elementFromPoint((left + right) / 2, (top + bottom) / 2);
+        if (!hit || !peer.contains(hit)) continue;
+        if (right - left > r.width * .5) {
+            if (b.top > r.top + r.height / 2 && b.bottom >= r.bottom - Math.min(r.height, b.height) * .2) r = new DOMRect(r.left, r.top, r.width, b.top - r.top);
+            else if (b.top <= r.top + Math.min(r.height, b.height) * .2 && b.bottom < r.top + r.height / 2) r = new DOMRect(r.left, b.bottom, r.width, r.bottom - b.bottom);
+        } else if (bottom - top > r.height * .5) {
+            if (b.left > r.left + r.width / 2 && b.right >= r.right - Math.min(r.width, b.width) * .2) r = new DOMRect(r.left, r.top, b.left - r.left, r.height);
+            else if (b.left <= r.left + Math.min(r.width, b.width) * .2 && b.right < r.left + r.width / 2) r = new DOMRect(b.right, r.top, r.right - b.right, r.height);
+        }
+    }
+    return r;
+}
+
 function updateOverlays() {
     const menuOpen = !!openMenu();
     const hasSection = alive(section);
     const hasItem = alive(focused) && (mode === "inside" || menuOpen);
     if (!hasSection && !hasItem) {
+        document.documentElement.removeAttribute("data-hh-server-area-picking");
         if (ringEl && frameEl) { place(ringEl, null); place(frameEl, null); }
         return;
     }
@@ -2766,13 +2989,11 @@ function updateOverlays() {
 
     // section frame: bright while picking sections, faint while locked in, hidden while a menu is open
     let secRect: DOMRect | null = null;
-    if (hasSection && !menuOpen) {
-        const sc = scrollAreaOf(section!.firstElementChild ?? section!);
-        const r = section!.getBoundingClientRect();
-        secRect = sc && sc.contains(section!) ? clipTo(r, sc) : r;
-        if (secRect.height > window.innerHeight) secRect = clipTo(secRect, document.documentElement);
-    }
-    place(frameEl, secRect, picking ? 0 : -2);
+    const serverArea = hasSection && section!.matches('[data-list-id="guildsnav"]');
+    frameEl.classList.toggle("hh-server-area", serverArea);
+    document.documentElement.toggleAttribute("data-hh-server-area-picking", serverArea && picking);
+    if (hasSection && picking) secRect = visibleSectionRect(section!);
+    place(frameEl, secRect);
     // keep the padlock on screen when the section touches the screen's edge (e.g. the server list on the right)
     if (secRect) {
         const edgeR = secRect.right > window.innerWidth - 14, edgeT = secRect.top < 14;
@@ -2783,11 +3004,17 @@ function updateOverlays() {
     // item ring: only while locked in (or in a menu)
     if (hasItem) {
         const isServer = focused!.matches(ROW.server);
+        ringEl.classList.toggle("hh-channel", focused!.matches(ROW.channel));
         if (ringEl.classList.contains("hh-round") !== isServer) ringEl.classList.toggle("hh-round", isServer);
-        const area = menuOpen ? null : scrollAreaOf(focused);
         const fr = focused!.getBoundingClientRect();
         // small things (switches, icon buttons) get a gap around them, so the ring never blends into a same-colored switch
-        place(ringEl, clipTo(fr, area), isServer ? 3 : fr.height < 48 ? 5 : 1);
+        if (isServer) {
+            const border = parseFloat(getComputedStyle(ringEl).borderLeftWidth) || 0;
+            const pad = border + Math.min(fr.width, fr.height) * .075;
+            // SVG icon masks clip Discord's picture, not our ring. Still respect the row's scroll containers.
+            const row = focused!.closest('[class*="listItem"]');
+            place(ringEl, visibleOutlineRect(focused!, pad, row ?? focused!.parentElement));
+        } else place(ringEl, visibleOutlineRect(focused!, fr.height < 48 ? 5 : 1));
     } else place(ringEl, null);
 }
 
@@ -2842,6 +3069,7 @@ function buttonLayout(): string {
 }
 /** The look of the button hints (html[data-hh-btns="<layout> <colours>"]). */
 function markButtons() {
+    if (!controllerActive) return;
     const v = `${buttonLayout()} ${opt("buttonColors") ?? "auto"}`;
     if (document.documentElement.getAttribute("data-hh-btns") !== v) document.documentElement.setAttribute("data-hh-btns", v);
 }
@@ -2857,7 +3085,20 @@ function badgeHtml(b: Badge): string {
         b === "LT" || b === "RT" ? "trigger" :
         b === "L" || b === "R" || b === "L3" || b === "R3" ? "stick" :
         b === "DPAD" ? "dpad" : "system";
-    return `<span class="hh-badge hh-${kind.replace(" ", " hh-")}">${label[b]}</span>`;
+    const shapes: Record<string, string> = {
+        DPAD: '<path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6z" fill="currentColor" stroke="none"/>',
+        MENU: '<path d="M5 6h14M5 12h14M5 18h14"/>',
+        VIEW: '<rect x="4" y="4" width="12" height="12" rx="1"/><path d="M9 9h11v11H9z"/>',
+        "✕": '<path d="m6 6 12 12M18 6 6 18"/>',
+        "○": '<circle cx="12" cy="12" r="8"/>',
+        "□": '<rect x="5" y="5" width="14" height="14"/>',
+        "△": '<path d="m12 4 9 16H3z"/>',
+        "+": '<path d="M4 12h16M12 4v16"/>',
+        "−": '<path d="M4 12h16"/>',
+    };
+    const shape = b === "DPAD" ? shapes.DPAD : (b === "MENU" || b === "VIEW") && buttonLayout() !== "nintendo" ? shapes[b] : shapes[label[b]];
+    const content = shape ? `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">${shape}</svg>` : label[b];
+    return `<span class="hh-badge hh-${kind.replace(" ", " hh-")}" aria-label="${b === "DPAD" ? "D-pad" : b === "MENU" ? "Menu" : b === "VIEW" ? "View" : label[b]}">${content}</span>`;
 }
 
 let helpTimer = 0;
@@ -2877,7 +3118,7 @@ function toggleHelp(force?: boolean, autoCloseMs = 0) {
     helpEl = document.createElement("div");
     helpEl.className = "hh-help";
     helpEl.innerHTML = `
-        <div class="hh-help-card"><div class="hh-brand">Handheld × Controller · Vesktop</div>
+        <div class="hh-help-card"><div class="hh-brand">${brandHtml}</div>
             <div class="hh-help-head">
                 <div class="hh-help-title">🎮 Controller <span style="opacity:.5;font-size:.6em">${VERSION}</span></div>
                 <div class="hh-help-sub">Press any button to close · ${badgeHtml("VIEW")} brings this back · ${badgeHtml("MENU")} controller settings</div>
@@ -2900,6 +3141,10 @@ function toggleHelp(force?: boolean, autoCloseMs = 0) {
 
 const CSS = `
 :root { --hh-accent: var(--focus-primary, var(--brand-500, var(--brand-experiment, #5865f2))); }
+[class*="baseLayer"] form [data-list-id="attachments"] { max-height: var(--hh-upload-height, 25vh); overflow-y: auto; box-sizing: border-box; }
+.hh-composer-send { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 2em; height: 2em; padding: 0; margin: 0; border: 0; border-radius: .4em; background: transparent; color: var(--interactive-normal, var(--text-normal)); cursor: pointer; }
+.hh-composer-send:hover { background: var(--background-modifier-hover); color: var(--interactive-hover, var(--text-normal)); }
+.hh-composer-send:focus-visible { outline: 2px solid var(--hh-accent); }
 .hh-ring, .hh-frame {
   position: fixed; left: 0; top: 0; z-index: 99999; pointer-events: none; opacity: 0; box-sizing: border-box;
   transition: transform 90ms cubic-bezier(.2,.8,.2,1), width 90ms cubic-bezier(.2,.8,.2,1),
@@ -2911,7 +3156,26 @@ const CSS = `
   background: color-mix(in srgb, var(--hh-accent) 6%, transparent);
   box-shadow: 0 0 0 1px rgb(0 0 0 / .3), inset 0 0 0 1px rgb(0 0 0 / .45), 0 0 10px color-mix(in srgb, var(--hh-accent) 30%, transparent);
 }
-.hh-ring.hh-round { border-radius: 30%; border-width: 5px;
+/* Discord's active-server marker shares our accent; unread dots retain their native appearance. */
+[class*="listItem"]:has([data-list-item-id^="guildsnav___"]) > [aria-hidden="true"] > [class*="item_"][class*="selected_"] {
+  background-color: var(--hh-accent) !important;
+  border-radius: 4px !important;
+  box-shadow: none !important;
+}
+/* Keep the full server-list frame in place; native markers return when the area frame leaves. */
+:root[data-hh-server-area-picking] [class*="listItem"]:has([data-list-item-id^="guildsnav___"]) > [aria-hidden="true"] > [class*="item_"] {
+  visibility: hidden !important;
+}
+/* One indicator on the controller-focused server; restore Discord's marker when focus leaves. */
+[class*="listItem"]:has([data-list-item-id^="guildsnav___"][data-hh-focus]) > [aria-hidden="true"] > [class*="item_"] {
+  visibility: hidden !important;
+}
+/* Keep channel unread markers distinct without shifting the controller outline or theme layout. */
+:is(li, [class*="containerDefault"]):has([data-list-item-id^="channels___"][data-hh-focus]) [class*="unread_"] {
+  visibility: hidden !important;
+}
+.hh-ring.hh-channel { box-shadow: inset 0 0 0 1px rgb(0 0 0 / .45); }
+.hh-ring.hh-round { border-radius: 30%; border-width: 3px;
   box-shadow: 0 0 0 2px rgb(0 0 0 / .45), 0 0 16px color-mix(in srgb, var(--hh-accent) 65%, transparent); }
 .hh-frame { border: 2px solid color-mix(in srgb, var(--hh-accent) 40%, transparent); border-radius: 12px; }
 .hh-lock {
@@ -2931,6 +3195,7 @@ const CSS = `
   background: color-mix(in srgb, var(--hh-accent) 4%, transparent);
   box-shadow: 0 0 12px color-mix(in srgb, var(--hh-accent) 30%, transparent);
 }
+.hh-frame.hh-server-area.hh-picking { box-shadow: none; }
 .hh-toast {
   position: fixed; top: 18px; left: 50%; transform: translateX(-50%); z-index: 100001; pointer-events: none;
   padding: 8px 14px; border-radius: 10px; font-size: 14px; font-weight: 600; opacity: 0; transition: opacity 150ms ease;
@@ -2983,6 +3248,7 @@ const CSS = `
   background: #3a3c43; border: 2px solid rgb(255 255 255 / .18);
   box-shadow: 0 3px 0 rgb(0 0 0 / .45), 0 0 0 1px rgb(0 0 0 / .3);
 }
+.hh-badge > svg { display: block; width: 18px; height: 18px; flex: none; }
 .hh-face { border-radius: 50%; width: 34px; padding: 0; font-size: 16px; }
 .hh-face-A { background: #2fb344; } .hh-face-B { background: #d63939; }
 .hh-face-X { background: #2f7bd6; } .hh-face-Y { background: #e3a008; color: #1d1d1d; }
@@ -3059,6 +3325,9 @@ function watchFeedTrack(t: MediaStreamTrack) {
  *  system, over the debug port — for when Chromium loses the controller (Bazzite reloads the controller profile on every
  *  Steam-button press, and the sandboxed browser can drop the pad for good). Used whenever the bridge is alive. */
 let extPad: Gamepad | null = null, extAliveAt = 0;
+let sampledExtPad: Gamepad | null = null;
+let extTransitions: Gamepad[] = [];
+let extInputKey = "";
 (window as any).__hhExtPadSet = (st: { b: number[]; a: number[]; } | null) => {
     extAliveAt = performance.now();
     if (!st) return;
@@ -3067,9 +3336,24 @@ let extPad: Gamepad | null = null, extAliveAt = 0;
         axes: st.a, buttons: st.b.slice(0, 17).map(v => ({ pressed: v > 0.5, touched: v > 0, value: v })),
         vibrationActuator: null, hapticActuator: null,
     } as unknown as Gamepad;
+    const key = extPad.buttons.map(b => b.pressed ? "1" : "0").join("") + ":" + stickDir(extPad);
+    // A press and release can arrive in the same animation frame. Keep both, in order.
+    if (!document.hasFocus() || (window as any).__hhNativeFileChooser || (window as any).__hhPad) {
+        extTransitions = []; sampledExtPad = extPad;
+    } else if (key !== extInputKey) {
+        extTransitions.push(extPad);
+    } else if (extTransitions.length) {
+        // Analog updates do not build a backlog while a stick is held in one direction.
+        extTransitions[extTransitions.length - 1] = extPad;
+    }
+    extInputKey = key;
 };
+function sampleControllerInput() {
+    if ((window as any).__hhPad) { extTransitions = []; sampledExtPad = extPad; return; }
+    sampledExtPad = extTransitions.shift() ?? extPad;
+}
 function getPad(): Gamepad | null {
-    if (extPad && performance.now() - extAliveAt < 3000 && !(window as any).__hhPad) return extPad; // (the test pad wins)
+    if (extPad && performance.now() - extAliveAt < 3000 && !(window as any).__hhPad) return sampledExtPad ?? extPad; // (the test pad wins)
     const pads = [...navigator.getGamepads()].filter(Boolean) as Gamepad[];
     return pads.find(p => p.mapping === "standard" && p.buttons.length >= 16) ?? pads[0] ?? null;
 }
@@ -3087,6 +3371,9 @@ function tick() {
     frame++;
     try {
         tickInner();
+        const idle = performance.now() - lastPadUse > 15000 && !kbEl && !panelEl && !calibEl && !helpEl;
+        if (controllerActive && (!idle || frame % 30 === 0)) updateOverlays();
+        if (controllerActive && frame % 4 === 0) updateHints();
         errorCount = 0;
     } catch (e) {
         // (never stops for good — that left the controller dead until a reload: report it once, then keep trying)
@@ -3103,18 +3390,29 @@ function tickInner() {
     const bg = performance.now() - lastBgCheck > 1000;
     if (bg) { lastBgCheck = performance.now(); if (replyMarked || (findStore("PendingReplyStore") as any)?.getPendingReply?.(SelectedChannelStore.getChannelId())) markReplyTarget(); }
     checksPaused = !(performance.now() < checkUntil || lastMenu || lastOverlays > 0 || bg);
-    if (!idle || frame % 30 === 0) {
+    if (controllerActive && (!idle || frame % 30 === 0)) {
         if (!checksPaused && (section || focused || openMenu() !== lastMenu)) watchLayers();
-        updateOverlays();
     }
     if (debugEl && frame % 20 === 0) updateDebug(); // the readout is costly: a few times a second is plenty
-    if (frame % 4 === 0) updateHints(); // (cheap: only writes when something changed)
     if (!document.hasFocus()) return;
+    sampleControllerInput();
     const pad = getPad();
     if (!pad) return;
 
     const pressed = pad.buttons.map(b => b.pressed || b.value > 0.5);
     const justPressed = (b: Btn) => pressed[b] && !prevPressed[b];
+    if ((window as any).__hhNativeFileChooser) { prevPressed = pressed; heldDir = null; return; }
+    const activity = controllerActivity(pad);
+    const activeInput = pressed.some(Boolean) || stickDir(pad) || Math.abs(pad.axes[2] ?? 0) > settings.store.stickDeadzone || Math.abs(pad.axes[3] ?? 0) > settings.store.stickDeadzone;
+    if (!controllerActive) {
+        if (!activeInput || activity === lastControllerActivity) { lastControllerActivity = activity; prevPressed = pressed; return; }
+        activateController();
+    }
+    lastControllerActivity = activity;
+    const expression = nativeExpressionPicker();
+    const popupOwnsInput = !!expression || !!openMenu() || overlayCount() > 0;
+    if (popupOwnsInput) navigationButtonsBlocked = true;
+    else if (![Btn.LB, Btn.RB, Btn.LT, Btn.RT].some(b => pressed[b])) navigationButtonsBlocked = false;
     if (pressed.some(Boolean) || stickDir(pad)) { lastPadUse = performance.now(); bumpChecks(); }
 
     if (!helpShownOnce && pressed.some(Boolean)) {
@@ -3161,6 +3459,7 @@ function tickInner() {
         return;
     }
     if (typingMode) {
+        if (justPressed(Btn.Menu)) { const send = composerSendContext(); if (send) kbSend(send.box); }
         if (justPressed(Btn.A) || justPressed(Btn.X)) { const a = document.activeElement; if (a && a.matches(TEXT_ENTRY)) openKeyboard(a); }
         if (justPressed(Btn.B)) backOutOfTyping();
         if (justPressed(Btn.Y)) pressY();
@@ -3171,6 +3470,14 @@ function tickInner() {
 
     // adjust mode (R3): only the sliders / resize handles on screen
     if (adjustMode) { handleAdjust(pad, justPressed, pressed); prevPressed = pressed; return; }
+
+    // The native picker owns navigation until it closes, including while Discord replaces category results.
+    if (expression && !openMenu() && (nativePickerLock || performance.now() - lastPadUse < 20000)) {
+        handleNativeExpressionPicker(expression, repeatFire(), justPressed, pressed, pad);
+        prevPressed = pressed;
+        return;
+    }
+    if (!expression) nativePickerLock = null;
 
     const dir: Dir | null =
         pressed[Btn.Up] ? "up" : pressed[Btn.Down] ? "down" : pressed[Btn.Left] ? "left" : pressed[Btn.Right] ? "right" : stickDir(pad);
@@ -3188,14 +3495,24 @@ function tickInner() {
     if (justPressed(Btn.X)) pressX();
     if (justPressed(Btn.Y)) pressY();
     // (held down, these keep going — faster the longer you hold)
-    if (held(Btn.LB, pressed)) switchServer(-1);
-    if (held(Btn.RB, pressed)) switchServer(1);
-    if (held(Btn.LT, pressed)) switchChannel(-1);
-    if (held(Btn.RT, pressed)) switchChannel(1);
+    if (expression && !openMenu()) {
+        if (justPressed(Btn.LB)) switchExpressionTab(expression, -1);
+        if (justPressed(Btn.RB)) switchExpressionTab(expression, 1);
+        if (held(Btn.LT, pressed)) scrollExpressionPicker(expression, -1);
+        if (held(Btn.RT, pressed)) scrollExpressionPicker(expression, 1);
+    } else if (!popupOwnsInput && !navigationButtonsBlocked) {
+        if (held(Btn.LB, pressed)) switchServer(-1);
+        if (held(Btn.RB, pressed)) switchServer(1);
+        if (held(Btn.LT, pressed)) switchChannel(-1);
+        if (held(Btn.RT, pressed)) switchChannel(1);
+    }
     if (justPressed(Btn.L3)) jumpToNewest();
     if (justPressed(Btn.R3)) toggleAdjust(true);
     if (justPressed(Btn.View)) toggleHelp();
-    if (justPressed(Btn.Menu)) openSettings();
+    if (justPressed(Btn.Menu)) {
+        const send = composerSendContext();
+        if (send) kbSend(send.box); else openSettings();
+    }
 
     const ry = pad.axes[3] ?? 0;
     scrollStick(ry, settings.store.stickDeadzone * 0.6); // (every frame: it keeps its own clock)
@@ -3217,6 +3534,7 @@ function setRootVar(name: string, value: string) {
     if (!varsEl || !varsEl.isConnected) {
         varsEl = document.createElement("style");
         varsEl.id = "hh-controls-vars";
+        varsEl.disabled = !controllerActive;
         document.head.append(varsEl);
     }
     varsEl.textContent = `:root { ${[...rootVars].map(([k, v]) => `${k}: ${v};`).join(" ")} }`;
@@ -3265,6 +3583,7 @@ const onContextMenuCapture = (e: MouseEvent) => {
 };
 
 function openDrawer(menu: Element) {
+    if (!controllerActive) return;
     if (!opt("menuDrawer") || !menu.matches('[role="menu"]')) return;
     const layer = menu.closest('[class*="layer_"]') ?? menu.parentElement;
     if (!layer || layer === document.body || layer.matches('[class*="baseLayer"]')) return;
@@ -3323,7 +3642,7 @@ function openDrawer(menu: Element) {
     }
     drawerLayer = layer;
     drawerMenu = menu;
-    if (!layer.querySelector(":scope > .hh-brand")) layer.insertAdjacentHTML("beforeend", `<div class="hh-brand">Handheld × Controller · Vesktop</div>`);
+    if (!layer.querySelector(":scope > .hh-brand")) layer.insertAdjacentHTML("beforeend", `<div class="hh-brand">${brandHtml}</div>`);
     document.documentElement.setAttribute("data-hh-drawer-on", "");
     markMenuStyle();
     // cover the lists — unless what you held is IN them (a server / channel menu): then push them over to keep it in view
@@ -3350,7 +3669,7 @@ function openDrawer(menu: Element) {
 let menuObserver: MutationObserver | null = null;
 function watchMenusEarly() {
     menuObserver = new MutationObserver(muts => {
-        if (!opt("menuDrawer")) return;
+        if (!controllerActive || !opt("menuDrawer")) return;
         for (const m of muts) {
             const t = m.target as Element;
             const inLayers = typeof t.className === "string" && /layerContainer|layers?_/.test(t.className);
@@ -3370,6 +3689,7 @@ function watchMenusEarly() {
 /** Which pop-up menu look is on (html[data-hh-menu-style]) — set whenever a menu or the panel opens, since Discord
  *  rewrites the html element's attributes now and then. */
 function markMenuStyle() {
+    if (!controllerActive) return;
     markButtons();
     const v = String(opt("menuStyle") ?? "blend");
     if (document.documentElement.getAttribute("data-hh-menu-style") !== v) document.documentElement.setAttribute("data-hh-menu-style", v);
@@ -3418,6 +3738,7 @@ function syncSubDrawer(menu: Element | null) {
     const layer = own && own !== drawerLayer ? own : null;
     if (subLayer && !subLayer.isConnected) subLayer = null;
     if (layer === subLayer) return;
+    subLayer?.querySelector(":scope > .hh-brand")?.remove();
     subLayer?.removeAttribute("data-hh-subdrawer");
     subLayer = null;
     document.documentElement.removeAttribute("data-hh-sub");
@@ -3433,6 +3754,7 @@ function syncSubDrawer(menu: Element | null) {
     setRootVar("--hh-dws", `${dws}px`);
     setRootVar("--hh-subw", `${subW}px`);
     layer.setAttribute("data-hh-subdrawer", side);
+    if (!layer.querySelector(":scope > .hh-brand")) layer.insertAdjacentHTML("beforeend", `<div class="hh-brand">${brandHtml}</div>`);
     subLayer = layer;
     document.documentElement.setAttribute("data-hh-sub", "");
 }
@@ -3606,7 +3928,7 @@ function togglePanel(show = !panelEl) {
     panelCat = null; panelIndex = 0; // (always opens on the list of pages)
     panelEl = document.createElement("div");
     panelEl.className = "hh-help hh-panel";
-    panelEl.innerHTML = `<div class="hh-help-card hh-panel-card"><div class="hh-brand">Handheld × Controller · Vesktop</div>
+    panelEl.innerHTML = `<div class="hh-help-card hh-panel-card"><div class="hh-brand">${brandHtml}</div>
         <div class="hh-help-head"><div class="hh-help-title">⚙️ Controller settings</div>
         <div class="hh-help-sub">${badgeHtml("DPAD")} choose · ${badgeHtml("A")} open / toggle · ◀ ▶ change · ${badgeHtml("B")} back · or just tap</div></div>
         <div class="hh-panel-rows"></div></div>`;
@@ -3977,7 +4299,7 @@ function openCalibration(firstTime = false) {
     calib = { step: 0, L: new Array(36).fill(0), R: new Array(36).fill(0), rest: [], stillSince: 0, turned: [0, 0], lastAng: [null, null], target: 0, results: [], flash: null, done: false, samples: [], learnedHits: 0, innerAtEdge: [] };
     calibEl = document.createElement("div");
     calibEl.className = "hh-help hh-calib";
-    calibEl.innerHTML = `<div class="hh-help-card hh-calib-card"><div class="hh-brand">Handheld × Controller · Vesktop</div>
+    calibEl.innerHTML = `<div class="hh-help-card hh-calib-card"><div class="hh-brand">${brandHtml}</div>
         <div class="hh-calib-steps"></div><div class="hh-calib-title"></div><div class="hh-calib-sub"></div>
         <div class="hh-calib-body"></div><div class="hh-calib-status"></div></div>`;
     document.body.append(calibEl);
@@ -4678,8 +5000,8 @@ function kbMoveCaret(step: 1 | -1) {
 /** Send the message. Tries, in order, stopping as soon as the box empties (= sent):
  *  1) an "Enter" the way Discord's editor really receives it (a beforeinput "new paragraph"),
  *  2) an Enter key press, 3) Discord's Send button, 4) sending the text directly through Discord, then clearing the box. */
-function kbSend() {
-    const f = kbTarget();
+function kbSend(target: HTMLElement | null = kbTarget()) {
+    const f = target;
     if (!f) return;
     if (document.activeElement !== f) f.focus();
     const isField = f.tagName === "INPUT" || f.tagName === "TEXTAREA";
@@ -4687,8 +5009,10 @@ function kbSend() {
     const text = () => raw().trim();
     const original = text();
     const originalRaw = raw();
-    if (!original) return;
-    const sent = () => !f.isConnected || text() === ""; // Discord empties the box when a message goes out
+    const uploads = () => [...(f.closest("form")?.querySelectorAll('[data-list-item-id^="attachments___"]') ?? [])];
+    const hasAttachments = uploads().length > 0;
+    if (!original && !hasAttachments) return;
+    const sent = () => !f.isConnected || (text() === "" && (!hasAttachments || uploads().length === 0)); // Discord empties the box when a message goes out
     const inPopout = !!f.closest('[role="dialog"]') || !f.closest('[class*="baseLayer"]') && !!f.closest('[class*="layer_"]');
     // a search box (or any box that isn't a message box): Enter is all ☰ does — its text must never go out as a message
     const isMessageBox = f.matches('[role="textbox"]') && !f.matches('[role="combobox"]') && !!f.closest('form, [role="dialog"]');
@@ -4726,7 +5050,7 @@ function kbSend() {
     }];
     // Enter first: with the text really in the editor, Discord's own Enter handler sends (checked live on the channel box
     // and on a profile card, where it goes to that person's DM). A card gets no direct send (see `direct`).
-    const steps = inPopout ? [enterKey, sendButton] : [enterKey, enterInput, sendButton, direct];
+    const steps = hasAttachments ? [enterKey] : inPopout ? [enterKey, sendButton] : [enterKey, enterInput, sendButton, direct];
     const run = (i: number) => {
         if (i >= steps.length) { restore(); debugNote("send: nothing worked"); return; }
         steps[i][1]();
@@ -4801,10 +5125,10 @@ function openKeyboard(field: Element | null) {
     let h = Math.round(window.innerHeight * opt("keyboardHeight") / 100);
     kbEl.style.height = `${h}px`;
     markMenuStyle();
-    kbEl.innerHTML = `<div class="hh-brand">Handheld × Controller · Vesktop</div><div class="hh-kb-hints">${kbHints()}</div><div class="hh-sugg"></div><div class="hh-kb-bar"></div><div class="hh-kb-keys"></div>`;
+    kbEl.innerHTML = `<div class="hh-brand">${brandHtml}</div><div class="hh-kb-hints">${kbHints()}</div><div class="hh-sugg"></div><div class="hh-kb-bar"></div><div class="hh-kb-keys"></div>`;
     // touch: tap keys directly (without stealing focus from the text box)
-    kbEl.addEventListener("pointerdown", e => e.preventDefault());
-    kbEl.addEventListener("mousedown", e => e.preventDefault());
+    kbEl.addEventListener("pointerdown", e => { if (!(e.target as Element).closest(".hh-brand a")) e.preventDefault(); });
+    kbEl.addEventListener("mousedown", e => { if (!(e.target as Element).closest(".hh-brand a")) e.preventDefault(); });
     kbEl.addEventListener("click", e => {
         if ((e.target as Element).closest(".hh-kb-toggle")) return kbToggleSplit();
         const cr = (e.target as Element).closest<HTMLElement>(".hh-clip-row");
@@ -4923,7 +5247,9 @@ function renderComposerBar() {
     const tx = box && tb ? `left:${tb.left - box.left}px;right:${box.right - tb.right + CLIP_W}px;font-size:${getComputedStyle(kbField!).fontSize};font-weight:${getComputedStyle(kbField!).fontWeight};line-height:${barH - 2}px` : "";
     bar.innerHTML = `<div class="hh-meta-line" style="${box ? `margin-left:${x0 - bx.left + (tb ? Math.max(0, tb.left - box.left + 4) : 0)}px` : ""}"><span class="hh-reply-line" hidden></span><span class="hh-typing-line"></span></div>
         <div class="hh-cbox" style="${geo}">${left.map(b => btn(b, false)).join("")}<div class="hh-preview hh-preview-bar" style="${tx}"></div>${right.map(b => btn(b, true)).join("")}${clipBtn()}</div>`;
-    composerBtnEls = [...left, ...right, CLIP_BTN];
+    const repo = kbEl?.querySelector<HTMLElement>(".hh-brand a");
+    composerBtnEls = [...left, ...right, CLIP_BTN, ...(repo ? [repo] : [])];
+    repo?.toggleAttribute("data-hh-brand-selected", kbActionIdx === composerBtnEls.length - 1);
     kbEl!.classList.toggle("hh-lock-box", kbActionIdx >= 0); // L3: locked onto the box's buttons, not the keys
     scheduleSuggestions(); // (the line above the box says what the buttons do)
     scheduleSuggestions();
@@ -5075,9 +5401,10 @@ function pressComposerButton(i: number) {
     const real = composerBtnEls[i];
     if (real === CLIP_BTN) return toggleClip(true);
     if (!real?.isConnected) return;
+    if (real.matches(".hh-brand a")) { real.click(); return; }
     kbActionIdx = -1;
     // GIF / sticker / emoji: their picker opens above the keyboard, which stays up to search it
-    if (/gif|sticker|emoji/i.test(real.getAttribute("aria-label") ?? "")) { renderComposerBar(); return openPicker(real); }
+    if (/\bgifs?\b|sticker|emoji/i.test(real.getAttribute("aria-label") ?? "")) { renderComposerBar(); return openPicker(real); }
     stopTyping(); // (anything else opens its own pop-out, navigated like any other)
     setTimeout(() => real.click(), 60);
 }
@@ -5096,6 +5423,103 @@ let pkSel = 0;
 let pkSig = "";
 const PICKER_LAYER = '[class*="expressionPickerPosition"]';
 const PICKER_RESULTS = '[role="gridcell"], [class*="result_"][role="button"]';
+/** Native picker tiles own their nested favorite buttons and media. Select/highlight the whole tile. */
+function expressionTile(el: Element): HTMLElement | null {
+    const tile = el.closest<HTMLElement>(PICKER_RESULTS);
+    return tile?.closest(PICKER_LAYER) ? tile : null;
+}
+function nativeExpressionPicker(): HTMLElement | null {
+    return [...document.querySelectorAll<HTMLElement>(PICKER_LAYER)]
+        .find(layer => !layer.hasAttribute("data-hh-picker") && isVisible(layer)) ?? null;
+}
+let nativePickerLock: { results: boolean; index: number; } | null = null;
+function nativeExpressionResults(layer: HTMLElement): HTMLElement[] {
+    return [...layer.querySelectorAll<HTMLElement>(PICKER_RESULTS)].filter(el => isVisible(el) && !isDisabled(el));
+}
+function keepNativeExpressionFocus(layer: HTMLElement) {
+    nativePickerLock ??= { results: false, index: 0 };
+    section = layer.querySelector('[role="dialog"]') ?? layer;
+    mode = "inside";
+    if (alive(focused) && layer.contains(focused) && (!nativePickerLock.results || !!expressionTile(focused))) return;
+    if (nativePickerLock.results) {
+        const results = nativeExpressionResults(layer);
+        const next = results[Math.min(nativePickerLock.index, Math.max(0, results.length - 1))];
+        setItem(next ?? null); // loading is still inside this picker; never restore the composer
+    } else {
+        setItem(layer.querySelector('[role="tab"][aria-selected="true"]') ?? itemsOnTop(section)[0] ?? null);
+    }
+}
+function handleNativeExpressionPicker(layer: HTMLElement, dir: Dir | null, jp: (b: Btn) => boolean, pressed: boolean[], pad: Gamepad) {
+    keepNativeExpressionFocus(layer);
+    const lock = nativePickerLock!;
+    if (dir) {
+        const tile = focused && expressionTile(focused);
+        const sc = tile && scrollableAncestor(tile);
+        const earlier = tile && nearestInDirection(tile, nativeExpressionResults(layer), "up");
+        // Scroll back through virtualized rows before crossing into the header at the real top.
+        if (dir === "up" && sc && sc.scrollTop > 2 && !earlier)
+            sc.scrollBy({ top: -Math.max(80, sc.clientHeight * 0.4), behavior: "auto" });
+        else moveInWindow(section!, dir); // freely move across grid, server rail, search and tabs; no outside hop
+    }
+    if (jp(Btn.A) && focused && layer.contains(focused)) {
+        const tile = expressionTile(focused);
+        if (tile) { lock.results = true; lock.index = 0; }
+        if (focused.matches(TEXT_ENTRY)) startTyping(focused);
+        else {
+            // Native server/category items can be listitems. Do not run the generic post-click
+            // textbox fallback, which would grab the composer behind the picker.
+            const target = tile?.matches('[role="gridcell"]') ? tile.querySelector<HTMLElement>('button, [role="button"]') ?? tile : focused;
+            (target as HTMLElement).click();
+        }
+        if (tile) setTimeout(() => { const current = nativeExpressionPicker(); if (current && nativePickerLock) keepNativeExpressionFocus(current); }, 120);
+    }
+    if (jp(Btn.Y)) { lock.results = false; setItem(layer.querySelector('[role="tab"][aria-selected="true"]')); }
+    if (jp(Btn.X)) pressX();
+    if (jp(Btn.LB)) switchExpressionTab(layer, -1);
+    if (jp(Btn.RB)) switchExpressionTab(layer, 1);
+    if (held(Btn.LT, pressed)) scrollExpressionPicker(layer, -1);
+    if (held(Btn.RT, pressed)) scrollExpressionPicker(layer, 1);
+    const ry = pad.axes[3] ?? 0;
+    if (Math.abs(ry) > settings.store.stickDeadzone * 0.6) {
+        const sc = scrollableAncestor(layer.querySelector(PICKER_RESULTS));
+        if (sc && layer.contains(sc)) sc.scrollTop += ry * settings.store.scrollSpeed;
+    }
+    if (jp(Btn.B)) {
+        const back = expressionBackButton(layer);
+        if (back) {
+            back.click();
+            lock.results = false; lock.index = 0;
+            setItem(layer.querySelector('[role="tab"][aria-selected="true"]'));
+            bumpChecks();
+            return;
+        }
+        const tab = layer.querySelector('[role="tab"][aria-selected="true"]')?.textContent ?? "";
+        const kind = /sticker/i.test(tab) ? /sticker/i : /emoji/i.test(tab) ? /emoji/i : /\bgifs?\b/i;
+        const opener = [...document.querySelectorAll<HTMLElement>('form button, form [role="button"]')].find(button => kind.test(button.getAttribute("aria-label") ?? ""));
+        if (opener) opener.click(); else closeWindow();
+        if (!nativeExpressionPicker()) nativePickerLock = null;
+        bumpChecks();
+    }
+}
+function expressionBackButton(layer: HTMLElement): HTMLElement | undefined {
+    return [...layer.querySelectorAll<HTMLElement>('button, [role="button"]')]
+        .find(button => /^(back|go back)$/i.test(button.getAttribute("aria-label") ?? "") && isVisible(button));
+}
+function switchExpressionTab(layer: HTMLElement, step: 1 | -1) {
+    const tabs = [...layer.querySelectorAll<HTMLElement>('[role="tab"]')].filter(isVisible);
+    if (!tabs.length) return;
+    const at = tabs.findIndex(tab => tab.getAttribute("aria-selected") === "true");
+    const next = tabs[(Math.max(0, at) + step + tabs.length) % tabs.length];
+    next.click();
+    if (nativePickerLock) { nativePickerLock.results = false; nativePickerLock.index = 0; }
+    section = layer.querySelector('[role="dialog"]') ?? layer; mode = "inside";
+    setItem(next); bumpChecks();
+}
+function scrollExpressionPicker(layer: HTMLElement, step: 1 | -1) {
+    const item = focused && expressionTile(focused) && layer.contains(focused) ? focused : layer.querySelector(PICKER_RESULTS);
+    const sc = scrollableAncestor(item);
+    if (sc && layer.contains(sc)) sc.scrollBy({ top: step * Math.max(80, sc.clientHeight * 0.6), behavior: "auto" });
+}
 function openPicker(real: HTMLElement) {
     pickerOpener = real;
     real.click();
@@ -5219,7 +5643,8 @@ function pkMove(dir: Dir) {
 function pkPick() {
     const it = pkItems[pkSel];
     if (!it?.el.isConnected) return pkRefresh(true);
-    (it.el.querySelector<HTMLElement>("button, [role='button']") ?? it.el).click();
+    // GIF results contain an Add to Favorites button; picking the GIF must click the tile itself.
+    (it.el.matches('[role="button"]') ? it.el : it.el.querySelector<HTMLElement>("button, [role='button']") ?? it.el).click();
     // a category (GIF "Trending" / a search term): new results, start at the top of them
     setTimeout(() => { if (pickerLayer?.isConnected) pkRefresh(true); }, 300);
 }
@@ -5247,7 +5672,11 @@ function handlePicker(jp: (b: Btn) => boolean, pressed: boolean[]): boolean {
         if (jp(Btn.LB)) pkSwitchTab(-1);
         if (jp(Btn.RB)) pkSwitchTab(1);
         if (jp(Btn.Y)) { pickerSearch = true; pkJustSearched = true; kbSym = false; pickerInput?.focus(); renderKeyboard(); setTimeout(() => pkRefresh(true), 60); }
-        if (jp(Btn.B)) closePicker();
+        if (jp(Btn.B)) {
+            const back = expressionBackButton(pickerLayer);
+            if (back) { back.click(); setTimeout(() => pkRefresh(true), 150); }
+            else closePicker();
+        }
     } else if (jp(Btn.B)) { pickerSearch = false; renderKeyboard(); setTimeout(() => pkRefresh(true), 60); }
     return true;
 }
@@ -5526,10 +5955,7 @@ html[data-hh-shift="slide"] [class*="layers_"] > [class*="baseLayer"] {
   background: color-mix(in srgb, var(--v-bg) 88%, transparent); border: 1px solid var(--v-line); color: var(--v-fg); font: 500 10.5px var(--v-font);
   transition: opacity 200ms ease; backdrop-filter: blur(6px); }
 .hh-hints.off { opacity: 0; }
-.hh-tag { left: 0; top: 0; padding: 1px 5px; gap: 3px; font-size: 9.5px; transition: opacity 150ms ease, transform 90ms cubic-bezier(.2,.8,.2,1); z-index: 100000; }
 .hh-hint { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
-.hh-tag .hh-hint { gap: 2px; }
-.hh-tag .hh-badge { transform: scale(.44); margin: -10px -8px; }
 .hh-hints.hh-hints-top { padding: 0 6px; z-index: 100002; overflow: hidden; box-sizing: border-box; }
 [data-hh-title-shift] { justify-content: flex-start !important; padding-left: var(--hh-title-pad) !important; transition: padding-left 150ms ease; }
 /* button colours: per controller, plain, or the highlight colour — everywhere (beats the keyboard's own plain badges) */
@@ -5547,8 +5973,11 @@ html[data-hh-shift="slide"] [class*="layers_"] > [class*="baseLayer"] {
 :root[data-hh-btns$=" plain"] .hh-badge:is(#hh-never, *) { background: #1a1b1e !important; color: #ededed !important; border-color: #444 !important; }
 :root[data-hh-btns$=" accent"] .hh-badge:is(#hh-never, *) { background: color-mix(in srgb, var(--hh-accent) 85%, #000) !important; color: #fff !important; border-color: var(--hh-accent) !important; }
 .hh-hint > span:last-child { color: var(--v-dim); }
-.hh-hints .hh-badge { transform: scale(.5); margin: -9px -7px; background: var(--v-panel) !important; color: var(--v-fg) !important;
+.hh-hints .hh-badge { transform: none; margin: 0; height: 18px; min-width: 18px; padding: 0 4px; font-size: 10px !important;
+  background: var(--v-panel) !important; color: var(--v-fg) !important;
   border: 1px solid var(--v-line-2) !important; box-shadow: none !important; }
+.hh-hints .hh-badge.hh-face { width: 18px; padding: 0; }
+.hh-hints .hh-badge > svg { width: 12px; height: 12px; }
 /* the keyboard in the Blend / Discord styles */
 :root[data-hh-menu-style="blend"] :is(.hh-kb, .hh-hints) { --v-bg: var(--background-floating, var(--background-base-lowest, #111214));
   --v-panel: var(--background-modifier-hover, rgb(255 255 255 / .04)); --v-key: transparent;
@@ -5886,8 +6315,12 @@ li[id^="chat-messages-"][data-hh-replying] > [class*="message_"]:is(#hh-never, *
 @keyframes hh-key-pop-v { 0% { transform: scale(1.1); background: #fff; color: #000; } 100% { transform: none; } }
 /* the plugin's small label, top-right of each pop-up (keyboard, menus, guide, settings) */
 .hh-brand { position: absolute; top: 8px; right: 12px; z-index: 5; pointer-events: none; font-family: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
-  font-size: 10px; font-weight: 500; letter-spacing: .14em; text-transform: uppercase; color: rgb(255 255 255 / .38); white-space: nowrap; }
-.hh-brand::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 7px; border-radius: 50%; background: rgb(255 255 255 / .5); vertical-align: 1px; }
+  font-size: 10px; font-weight: 500; letter-spacing: .14em; text-transform: uppercase; color: var(--text-muted, var(--text-secondary, currentColor)); white-space: nowrap; }
+.hh-brand a { pointer-events: auto; color: inherit; text-decoration: none; }
+.hh-brand a:hover { color: var(--hh-accent); text-decoration: underline; }
+.hh-brand a[data-hh-brand-selected] { outline: 3px solid var(--hh-accent); outline-offset: 4px; border-radius: 3px; }
+.hh-brand a:focus-visible { outline: 2px solid var(--hh-accent); outline-offset: 2px; }
+.hh-brand::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 7px; border-radius: 50%; background: currentColor; vertical-align: 1px; }
 .hh-help-card { position: relative; }
 :root[data-hh-drawer-on] :is([data-hh-drawer], [data-hh-subdrawer]) [role="menu"]:is(#hh-never, *) { padding-top: 30px !important; }
 [data-hh-drawer="left"] > .hh-brand { right: auto; left: 14px; }
@@ -5940,20 +6373,54 @@ li[id^="chat-messages-"][data-hh-replying] > [class*="message_"]:is(#hh-never, *
 @keyframes hh-kb-out { to { transform: translateY(100%); } }
 `;
 
-// touching or clicking hides the controller UI; tapping a text field counts as choosing to type
-const onPointerDown = (e: PointerEvent) => {
-    if (!e.isTrusted) return; // our own pretend taps aren't you touching the screen
-    if ((e.target as Element)?.closest?.(".hh-kb, .hh-panel")) return; // our own keyboard / settings: leave state alone
-    setItem(null);
-    section = null;
-    mode = "sections";
-    returnStack = [];
-    if ((e.target as Element)?.closest?.(TEXT_ENTRY)) { typingMode = true; typingBase = overlayCount(); }
-    else if (kbEl) { closeKeyboard(); typingMode = false; }
-};
+// Input modality is explicit: controller presentation never persists after real mouse/keyboard input.
+let controllerActive = false;
+let lastControllerActivity = "";
+function controllerActivity(pad: Gamepad): string {
+    return pad.buttons.map(b => b.pressed || b.value > .5 ? "1" : "0").join("") + ":" + stickDir(pad)
+        + ":" + (Math.abs(pad.axes[2] ?? 0) > settings.store.stickDeadzone ? Math.sign(pad.axes[2]) : 0)
+        + ":" + (Math.abs(pad.axes[3] ?? 0) > settings.store.stickDeadzone ? Math.sign(pad.axes[3]) : 0);
+}
+function activateController() {
+    controllerActive = true;
+    (window as any).__hhControllerActive = true;
+    if (styleEl) styleEl.disabled = false;
+    if (varsEl) varsEl.disabled = false;
+    for (const el of document.querySelectorAll<HTMLElement>(".hh-ring,.hh-frame,.hh-hints,.hh-debug")) el.hidden = false;
+    bumpChecks();
+}
+function usePointerKeyboard() {
+    extTransitions = []; sampledExtPad = extPad;
+    const pad = getPad();
+    if (pad) { lastControllerActivity = controllerActivity(pad); prevPressed = pad.buttons.map(b => b.pressed || b.value > .5); }
+    if (!controllerActive) return;
+    controllerActive = false;
+    (window as any).__hhControllerActive = false;
+    // Hide first so closing animations cannot leave glyphs or unstyled UI behind.
+    for (const el of document.querySelectorAll<HTMLElement>(".hh-ring,.hh-frame,.hh-hints,.hh-debug,.hh-toast,.hh-kb,.hh-help,.hh-panel,.hh-padcard")) el.hidden = true;
+    closeKeyboard(); closeDrawer(); toggleHelp(false); togglePanel(false);
+    calibEl?.remove(); calibEl = null; calib = null;
+    adjustMode = false; typingMode = false; heldDir = null; holdState.clear();
+    setItem(null); section = null; sectionKey = ""; mode = "sections"; innerMsg = null; returnStack = [];
+    nativePickerLock = null;
+    for (const el of document.querySelectorAll("[data-hh-held]")) el.removeAttribute("data-hh-held");
+    composerSendEl?.remove(); composerSendEl = null;
+    document.documentElement.removeAttribute("data-hh-server-area-picking");
+    document.documentElement.removeAttribute("data-hh-btns");
+    document.documentElement.removeAttribute("data-hh-menu-style");
+    shiftTitle(false);
+    if (styleEl) styleEl.disabled = true;
+    if (varsEl) varsEl.disabled = true;
+    lastPadUse = -Infinity;
+}
+const onPointerDown = (e: PointerEvent) => { if (e.isTrusted) usePointerKeyboard(); };
+const onPointerMove = (e: PointerEvent) => { if (e.isTrusted && (e.movementX || e.movementY)) usePointerKeyboard(); };
+const onKeyboardInput = (e: KeyboardEvent) => { if (e.isTrusted) usePointerKeyboard(); };
+const onWheelInput = (e: WheelEvent) => { if (e.isTrusted && (e.deltaX || e.deltaY)) usePointerKeyboard(); };
 
 export default definePlugin({
     name: "HandheldControls",
+    enabledByDefault: true,
     description: "Navigate Discord with a controller (built for the ROG Ally X). Works with any theme.",
     authors: [{ name: "Ahmad", id: 0n }],
     settings,
@@ -5963,6 +6430,8 @@ export default definePlugin({
         styleEl.id = "hh-controls-style";
         styleEl.textContent = CSS + CSS_EXTRA;
         document.head.append(styleEl);
+        controllerActive = false; (window as any).__hhControllerActive = false;
+        styleEl.disabled = true;
         applyColors();
         void loadWords();
         void loadCalibs();
@@ -5986,11 +6455,14 @@ export default definePlugin({
             } catch { }
         }, 3000);
         document.addEventListener("pointerdown", onPointerDown, true);
+        document.addEventListener("pointermove", onPointerMove, true);
+        document.addEventListener("keydown", onKeyboardInput, true);
+        document.addEventListener("wheel", onWheelInput, true);
         document.addEventListener("contextmenu", onContextMenuCapture, true);
         document.addEventListener("keydown", onBackKey, true);
         watchMenusEarly();
         document.addEventListener("click", onMenuClickCapture, true);
-        prevPressed = [];
+        prevPressed = []; extTransitions = []; sampledExtPad = extPad;
         if ((settings.store.prefsVersion ?? 0) < 2) {
             settings.store.drawerSide = "right";
             settings.store.drawerWidth = 290;
@@ -6012,7 +6484,7 @@ export default definePlugin({
         setTimeout(() => toast(`🎮 Handheld Controls ${VERSION} loaded`, 2500), 1500);
         // read-only peek at the navigation state, for live testing over the debug port
         (window as any).__hhState = () => ({
-            version: VERSION, hintsOff: { panel: !!panelEl, help: !!helpEl, calib: !!calibEl, padIdle: Math.round(performance.now() - lastPadUse), pad: !!getPad() }, mode, typing: typingMode, keyboard: !!kbEl, menu: !!openMenu(), windows: overlayCount(),
+            version: VERSION, controllerActive, hintsOff: { panel: !!panelEl, help: !!helpEl, calib: !!calibEl, padIdle: Math.round(performance.now() - lastPadUse), pad: !!getPad() }, mode, typing: typingMode, keyboard: !!kbEl, menu: !!openMenu(), windows: overlayCount(),
             section: describe(section), item: describe(focused), inMessage: !!innerMsg, log: [...debugLog],
             sections: listSections().map(describe),
             items: alive(section) ? (listRows(section) ?? itemsOnTop(section)).slice(0, 40).map(e => describe(e) + " " + (e.textContent ?? "").trim().replace(/\s+/g, " ").slice(0, 24)) : [],
@@ -6044,6 +6516,9 @@ export default definePlugin({
         replyMarked?.removeAttribute("data-hh-replying"); replyMarked = null;
         FluxDispatcher.unsubscribe("LOAD_MESSAGES_SUCCESS", onMessagesLoaded);
         document.removeEventListener("pointerdown", onPointerDown, true);
+        document.removeEventListener("pointermove", onPointerMove, true);
+        document.removeEventListener("keydown", onKeyboardInput, true);
+        document.removeEventListener("wheel", onWheelInput, true);
         document.removeEventListener("contextmenu", onContextMenuCapture, true);
         document.removeEventListener("click", onMenuClickCapture, true);
         closeDrawer();
@@ -6053,6 +6528,11 @@ export default definePlugin({
         section = null;
         returnStack = [];
         toggleHelp(false);
+        document.documentElement.removeAttribute("data-hh-server-area-picking");
+        for (const el of discovered) el.removeAttribute("data-hh-discovered");
+        discovered.clear(); discoveredAt = -Infinity;
+        for (const uploads of document.querySelectorAll<HTMLElement>('form [data-list-id="attachments"]')) uploads.style.removeProperty("--hh-upload-height");
+        composerSendEl?.remove(); composerSendEl = null;
         ringEl?.remove(); ringEl = null;
         frameEl?.remove(); frameEl = null;
         styleEl?.remove(); styleEl = null;

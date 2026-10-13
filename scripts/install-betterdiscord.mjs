@@ -47,7 +47,14 @@ try {
         }
         mkdirSync(manifests, { recursive: true });
         writeFileSync(manifest, JSON.stringify({ destination, hashes }, null, 2));
-        console.log(`Installed controller plugins in ${destination}. Enable HandheldControls in BetterDiscord Settings → Plugins.`);
+        for (const channel of ["stable", "ptb", "canary"]) {
+            const file = join(dirname(destination), "data", channel, "plugins.json");
+            const saved = existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : {};
+            saved.HandheldControls = true;
+            mkdirSync(dirname(file), { recursive: true });
+            writeFileSync(file, JSON.stringify(saved, null, 2));
+        }
+        console.log(`Installed and enabled HandheldControls in ${destination}. Restart Discord.`);
         if (existsSync(backup)) console.log(`Previous plugin copies backed up in ${backup}`);
     }
 } catch (error) { console.error(error.message); process.exitCode = 1; }

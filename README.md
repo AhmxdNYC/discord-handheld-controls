@@ -2,18 +2,20 @@
 
 **Download installers — extract the ZIP and launch:**
 
-- [Windows x64](https://github.com/AhmxdNYC/discord-handheld-controls/releases/download/v5.16.1/HandheldControls-Windows-x64.zip) — open `HandheldControls-Installer.exe`
-- [Linux x64](https://github.com/AhmxdNYC/discord-handheld-controls/releases/download/v5.16.1/HandheldControls-Linux-x64.zip) — open `Install.desktop`
-- [macOS Apple Silicon](https://github.com/AhmxdNYC/discord-handheld-controls/releases/download/v5.16.1/HandheldControls-macOS-AppleSilicon.zip) — open `Install.command`
-- [macOS Intel](https://github.com/AhmxdNYC/discord-handheld-controls/releases/download/v5.16.1/HandheldControls-macOS-Intel.zip) — open `Install.command`
+- [Windows x64](https://github.com/AhmxdNYC/discord-handheld-controls/releases/download/v6.23.0/HandheldControls-Windows-x64.zip) — open `HandheldControls-Installer.exe`
+- [Linux x64](https://github.com/AhmxdNYC/discord-handheld-controls/releases/download/v6.23.0/HandheldControls-Linux-x64.zip) — open `Install.desktop`
+- [macOS Apple Silicon](https://github.com/AhmxdNYC/discord-handheld-controls/releases/download/v6.23.0/HandheldControls-macOS-AppleSilicon.zip) — open `Install.command`
+- [macOS Intel](https://github.com/AhmxdNYC/discord-handheld-controls/releases/download/v6.23.0/HandheldControls-macOS-Intel.zip) — open `Install.command`
 
-No Node.js, Git or build tools needed. Choose Discord/Vencord, BetterDiscord or Vesktop in the installer menu. These are preview builds; live controller testing is pending. [Release details and checksums](https://github.com/AhmxdNYC/discord-handheld-controls/releases/tag/v5.16.1).
+No Node.js, Git or build tools needed. Choose Discord/Vencord, BetterDiscord or Vesktop in the installer menu. These are preview builds; live controller testing is pending. [Release details and checksums](https://github.com/AhmxdNYC/discord-handheld-controls/releases/tag/v6.23.0).
 
 Navigate Discord with a controller and type with an on-screen keyboard. Built for an ROG Ally X running Bazzite; the main plugin reads standard controllers through Chromium's Gamepad API.
 
 HandheldControls is available as a **Vencord custom plugin** for Vesktop/official Discord and as standalone **BetterDiscord `.plugin.js` files** built from the same source. Official-client hardware testing is still needed for both hosts.
 
 ## Features
+
+- Automatic input switching: real mouse movement, clicks, scrolling, or typing restores your normal theme immediately; controller input brings back controller navigation. No live validation of this new switching behavior yet.
 
 - Section navigation for servers, channels, messages, account controls, settings and menus.
 - Lock into a section, scroll, open context menus and switch servers/channels.
@@ -52,7 +54,7 @@ This clones a tested Vencord revision into `.build/Vencord`, copies the plugins,
 node scripts/setup.mjs --inject
 ```
 
-Choose the Discord installation in the installer. Restart Discord, open **Settings → Vencord → Plugins**, enable **HandheldControls**, and restart again. Keep this repository and its `.build/Vencord` folder: the development installation loads files from there.
+Choose the Discord installation in the installer. Restart Discord. **HandheldControls is enabled by default** on first installation; an existing explicit disabled preference is preserved. Keep this repository and its `.build/Vencord` folder: the development installation loads files from there.
 
 Alternatively, use the platform launcher: `Install-Windows.cmd`, `Install-macOS.command`, or `./install-linux.sh`. Each builds the plugins and opens the native installer. On macOS/Linux, run `chmod +x Install-macOS.command install-linux.sh` if the downloaded files lost executable permissions.
 
@@ -85,7 +87,7 @@ To uninstall the client modification without rebuilding, run `node scripts/setup
 
 ## Vesktop
 
-Build with `node scripts/setup.mjs --client vesktop`. In Vesktop **Settings → Vesktop Settings → Open Developer Settings → Vencord Location**, select `.build/Vencord/dist`, then fully restart Vesktop and enable HandheldControls. Flatpak needs persistent access to the checkout; for example:
+Build with `node scripts/setup.mjs --client vesktop`. In Vesktop **Settings → Vesktop Settings → Open Developer Settings → Vencord Location**, select `.build/Vencord/dist`, then fully restart Vesktop. HandheldControls is enabled by default on first installation. Flatpak needs persistent access to the checkout; for example:
 
 ```sh
 flatpak override --user dev.vencord.Vesktop --filesystem="$PWD/.build/Vencord"
@@ -99,7 +101,7 @@ For Discord already using BetterDiscord, install the standalone plugin build:
 node scripts/setup.mjs --client betterdiscord --inject
 ```
 
-Enable HandheldControls under **Settings → BetterDiscord → Plugins**. Use `--plugins-dir "path/to/plugins"` for custom installations. The command uses BetterDiscord's existing plugin loader; it does not patch the client with Vencord. See [BetterDiscord installation, updates and removal](docs/betterdiscord.md).
+The installer enables HandheldControls; restart Discord. Use `--plugins-dir "path/to/plugins"` for custom installations. The command uses BetterDiscord's existing plugin loader; it does not patch the client with Vencord. See [BetterDiscord installation, updates and removal](docs/betterdiscord.md).
 
 ## Platform coverage
 

@@ -166,6 +166,31 @@ func defaultPlugins(platform, home, appdata, xdg string) (string, error) {
 	}
 	return "", errors.New("unsupported platform")
 }
+
+// BetterDiscord keeps plugin enablement separately for stable, PTB and Canary.
+func enableBetterDiscord(directory string) error {
+	for _, channel := range []string{"stable", "ptb", "canary"} {
+		file := filepath.Join(filepath.Dir(directory), "data", channel, "plugins.json")
+		saved := map[string]interface{}{}
+		data, err := os.ReadFile(file)
+		if err == nil {
+			if err := json.Unmarshal(data, &saved); err != nil {
+				return fmt.Errorf("invalid BetterDiscord state %s: %w", file, err)
+			}
+		} else if !os.IsNotExist(err) {
+			return err
+		}
+		saved["HandheldControls"] = true
+		data, err = json.MarshalIndent(saved, "", "  ")
+		if err != nil {
+			return err
+		}
+		if err := writeFile(file, data, 0644); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 func installBetterDiscord(root, state, directory string, remove bool) error {
 	info, err := os.Stat(directory)
 	if err != nil || !info.IsDir() {
@@ -238,7 +263,10 @@ func installBetterDiscord(root, state, directory string, remove bool) error {
 	if err != nil {
 		return err
 	}
-	return writeFile(recordPath, data, 0644)
+	if err := writeFile(recordPath, data, 0644); err != nil {
+		return err
+	}
+	return enableBetterDiscord(directory)
 }
 func runNative(binary, target, action, branch, location string) error {
 	args := []string{"--" + action}
@@ -375,7 +403,7 @@ func perform(root string, m manifest, client, action, branch, location, plugins 
 			return err
 		}
 		if action == "install" {
-			fmt.Println("\nInstalled. Enable HandheldControls in Settings > BetterDiscord > Plugins.")
+			fmt.Println("\nInstalled and enabled HandheldControls. Restart Discord.")
 		} else {
 			fmt.Println("Removed controller plugins. Saved settings and BetterDiscord remain.")
 		}
@@ -409,7 +437,7 @@ func perform(root string, m manifest, client, action, branch, location, plugins 
 			return err
 		}
 		if action == "install" {
-			fmt.Println("\nRestart Discord. Enable HandheldControls in Settings > Vencord > Plugins, then restart again.")
+			fmt.Println("\nRestart Discord. HandheldControls is enabled by default on first installation.")
 		} else {
 			fmt.Println("Discord restored. Restart it.")
 		}
@@ -423,7 +451,7 @@ func perform(root string, m manifest, client, action, branch, location, plugins 
 		}
 		fmt.Println("\nIn Vesktop Settings > Developer Settings > Vencord Location, choose:")
 		fmt.Println(filepath.Join(target, "dist"))
-		fmt.Println("Restart Vesktop and enable HandheldControls. Flatpak may need access to this folder.")
+		fmt.Println("Restart Vesktop. HandheldControls is enabled by default on first installation. Flatpak may need access to this folder.")
 	default:
 		return errors.New("client must be discord, vencord, betterdiscord or vesktop")
 	}

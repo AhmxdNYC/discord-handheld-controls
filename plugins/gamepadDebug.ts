@@ -12,6 +12,7 @@ export default definePlugin({
         box.style.cssText = "position:fixed;top:10px;left:10px;z-index:99999;background:#000c;color:#0f0;font:16px monospace;padding:10px;border-radius:8px;white-space:pre;pointer-events:none";
         document.body.append(box);
         timer = window.setInterval(() => {
+            box!.hidden = (window as any).__hhControllerActive === false;
             const pads = [...navigator.getGamepads()].filter(Boolean) as Gamepad[];
             box!.textContent = pads.length
                 ? pads.map(g =>

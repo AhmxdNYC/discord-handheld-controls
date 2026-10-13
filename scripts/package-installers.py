@@ -100,7 +100,7 @@ exit 1
     shutil.copy2(installer_source, source / "VencordInstaller-source.zip")
     shutil.copy2(ROOT / "LICENSE", directory / "LICENSE")
     shutil.copy2(ROOT / "docs" / "downloadable-installers.md", directory / "START-HERE.txt")
-    manifest = {"version": "5.16.1", "installer": f"native/{asset}", "files": {}}
+    manifest = {"version": json.loads((ROOT / "package.json").read_text())["version"], "installer": f"native/{asset}", "files": {}}
     for path in sorted(directory.rglob("*")):
         if path.is_file() and path.relative_to(directory).parts[0] in ["payload", "native"]:
             manifest["files"][path.relative_to(directory).as_posix()] = hashlib.sha256(path.read_bytes()).hexdigest()

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
@@ -58,10 +58,17 @@ test("bundles load as standalone BetterDiscord plugin classes", () => {
     }
 });
 test("BetterDiscord install copies bundles and uninstall protects edited files", t => {
-    const directory = mkdtempSync(join(tmpdir(), "BetterDiscord plugins "));
-    t.after(() => rmSync(directory, { recursive: true, force: true }));
+    const root = mkdtempSync(join(tmpdir(), "BetterDiscord plugins "));
+    const directory = join(root, "plugins");
+    mkdirSync(directory);
+    const state = join(root, "data", "stable", "plugins.json");
+    mkdirSync(join(root, "data", "stable"), { recursive: true });
+    writeFileSync(state, JSON.stringify({ OtherPlugin: true, GamepadDebug: false }));
+    t.after(() => rmSync(root, { recursive: true, force: true }));
     const run = (...args) => spawnSync(process.execPath, ["scripts/install-betterdiscord.mjs", "--plugins-dir", directory, ...args], { encoding: "utf8" });
     assert.equal(run().status, 0);
+    assert.deepEqual(JSON.parse(readFileSync(state, "utf8")), { OtherPlugin: true, GamepadDebug: false, HandheldControls: true });
+    for (const channel of ["ptb", "canary"]) assert.equal(JSON.parse(readFileSync(join(root, "data", channel, "plugins.json"), "utf8")).HandheldControls, true);
     const file = join(directory, "HandheldControls.plugin.js");
     const original = readFileSync(file);
     writeFileSync(file, "edited");

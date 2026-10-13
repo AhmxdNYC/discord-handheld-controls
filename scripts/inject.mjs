@@ -58,7 +58,7 @@ try {
     else {
         console.log(`Using controller build: ${target}\nFully quit Discord before continuing.`);
         run(binary, installerArgs, root, { ...process.env, VENCORD_USER_DATA_DIR: target, VENCORD_DEV_INSTALL: "1" });
-        console.log(action === "install" ? "Installer finished. Restart Discord and enable HandheldControls in Settings → Vencord → Plugins." : "Installer finished. Restart Discord.");
+        console.log(action === "install" ? "Installer finished. Restart Discord. HandheldControls is enabled by default on first installation." : "Installer finished. Restart Discord.");
     }
 } catch (error) {
     console.error(error.message);

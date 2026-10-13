@@ -12,7 +12,7 @@ With Node.js 22+ and npm installed, run from this repository:
 node scripts/setup.mjs --client betterdiscord --inject
 ```
 
-This installs the locked build dependencies when absent, builds three standalone plugins and copies them into BetterDiscord's existing plugin folder. Enable **HandheldControls** in Discord **Settings → BetterDiscord → Plugins**. HeldIndicator is optional; GamepadDebug is a diagnostic overlay that should normally stay disabled.
+This installs the locked build dependencies when absent, builds three standalone plugins and copies them into BetterDiscord's existing plugin folder. The installer enables **HandheldControls**; restart Discord. HeldIndicator is optional; GamepadDebug is a diagnostic overlay that should normally stay disabled.
 
 If your installation uses a different plugin folder, use BetterDiscord's **Open Plugins Folder** button to find it:
 

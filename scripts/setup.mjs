@@ -24,7 +24,7 @@ type-check and build. No Discord installation is modified by the default command
 --help          Show this help.
 
 Keep the Vencord checkout after installation: Discord loads its build from there.
-Enable HandheldControls in Discord Settings > Vencord > Plugins and restart Discord.`;
+HandheldControls is enabled by default on first installation; restart Discord.`;
 
 try {
     let target = join(root, ".build", "Vencord");

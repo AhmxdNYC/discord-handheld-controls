@@ -32,6 +32,7 @@ function clearHeld() {
 
 function onContextMenu(e: MouseEvent) {
     clearHeld();
+    if ((window as any).__hhControllerActive === false || e.isTrusted) return;
     const target = (e.target as Element | null)?.closest?.(TARGET_SELECTOR);
     if (!target) return;
     held = target;

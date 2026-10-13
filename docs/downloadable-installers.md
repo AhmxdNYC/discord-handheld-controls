@@ -14,8 +14,8 @@ verified native installer are included. The Discord installer may contact its
 upstream release service during startup, so internet access can still be needed.
 
 Regular Discord/Vencord:
-Choose the Discord installation in the native installer. Restart Discord, enable
-HandheldControls under Settings > Vencord > Plugins, then restart again.
+Choose the Discord installation in the native installer. Restart Discord.
+HandheldControls is enabled by default on first installation.
 Stable/PTB/Canary and custom installation selection use Vencord's installer.
 This uses the bundled Vencord build. Users with additional custom Vencord plugins
 should use the source setup with their existing checkout to preserve those plugins.
@@ -25,14 +25,13 @@ instructions. The launcher does not silently elevate itself.
 BetterDiscord:
 BetterDiscord must already be installed. The launcher copies the standalone
 plugins into its existing plugin folder; enter a custom folder if needed.
-Enable HandheldControls in Settings > BetterDiscord > Plugins. HeldIndicator is
+The installer enables HandheldControls; restart Discord. HeldIndicator is
 optional; GamepadDebug is for diagnostics. Previous copies are backed up.
 Removal preserves settings and refuses to delete plugins edited after installation.
 
 Vesktop:
 The launcher prepares a persistent build folder and shows its path. Choose it in
-Vesktop Settings > Developer Settings > Vencord Location, restart and enable the
-plugin. Linux Flatpak may need access to the shown folder.
+Vesktop Settings > Developer Settings > Vencord Location, restart. HandheldControls is enabled by default on first installation. Linux Flatpak may need access to the shown folder.
 
 Builds and backup records are stored in your user's configuration folder under
 DiscordHandheldControls. Once installed you can delete the extracted download;

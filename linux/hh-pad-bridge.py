@@ -225,6 +225,15 @@ def run():
                     if ev.type == E.EV_KEY and ev.code in CODE_TO_INDEX:
                         buttons[CODE_TO_INDEX[ev.code]] = 1.0 if ev.value else 0.0
                         dirty = True
+                    elif ev.type == E.EV_SYN and ev.code == E.SYN_REPORT and dirty and cdp.sock is not None:
+                        # Preserve separate press/release reports even when evdev delivers a batch.
+                        state = json.dumps({"b": [round(x, 3) for x in buttons], "a": [round(x, 3) for x in axes]})
+                        if state != last_sent:
+                            try:
+                                cdp.send(f"window.__hhExtPadSet && window.__hhExtPadSet({state})")
+                                last_sent, dirty = state, False
+                            except Exception:
+                                cdp.close()
                     elif ev.type == E.EV_ABS and ev.code in absinfo:
                         info, v = absinfo[ev.code], ev.value
                         if ev.code == E.ABS_X: axes[0] = norm(info, v)
