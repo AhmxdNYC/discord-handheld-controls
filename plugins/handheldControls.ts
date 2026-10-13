@@ -317,7 +317,7 @@ function opt<T = any>(key: string): T {
     return (v === undefined || v === null || v === "" ? OPT_DEFAULTS[key] : v) as T;
 }
 
-const VERSION = "v6.31";
+const VERSION = "v6.32";
 const brandHtml = `<a href="https://github.com/AhmxdNYC/discord-handheld-controls" target="_blank" rel="noopener noreferrer" aria-label="Handheld Controls on GitHub">Handheld × Controller</a>`;
 // Discord's own message sending (used only if pressing Enter in the box doesn't send)
 const MessageActions = findByPropsLazy("sendMessage", "editMessage");
@@ -4180,29 +4180,48 @@ const escapeSuggestion = (text: string) => text.replace(/&/g, "&amp;").replace(/
 type DiscordSuggestion = { target: HTMLElement; label: string; };
 let discordSuggestions: DiscordSuggestion[] = [];
 let autocompleteRoot: HTMLElement | null = null;
+const autocompleteMirrors = new Set<HTMLElement>();
+const autocompleteChoices = '[role="option"], [role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"], [role="treeitem"], [role="gridcell"], [role="tab"], button, [role="button"]';
 let suggestionObserver: MutationObserver | null = null;
 function releaseAutocomplete() {
-    autocompleteRoot?.removeAttribute("data-hh-autocomplete-mirror");
+    for (const root of autocompleteMirrors) root.removeAttribute("data-hh-autocomplete-mirror");
+    autocompleteMirrors.clear();
     autocompleteRoot = null; discordSuggestions = [];
 }
 function readDiscordSuggestions(): DiscordSuggestion[] {
     const editor = kbTarget();
     if (!controllerActive || !kbEl || !editor) { releaseAutocomplete(); return []; }
     const ids = `${editor.getAttribute("aria-controls") ?? ""} ${editor.getAttribute("aria-owns") ?? ""}`.trim().split(/\s+/);
-    const linked = ids.map(id => document.getElementById(id)).find(el => el?.matches('[role="listbox"], [role="menu"]') || el?.querySelector('[role="option"]'));
-    const list = (linked ?? editor.closest("form")?.querySelector('[class*="autocomplete_"] [role="listbox"]')) as HTMLElement | undefined;
+    const linked = ids.map(id => document.getElementById(id)).find(el => el?.matches('[role="listbox"], [role="menu"], [role="tree"], [role="grid"], [role="dialog"]') || el?.querySelector(autocompleteChoices));
+    const list = (linked ?? editor.closest("form")?.querySelector('[class*="autocomplete_"]')) as HTMLElement | undefined;
     if (!list || !list.isConnected || list.getAttribute("aria-hidden") === "true") { releaseAutocomplete(); return []; }
     const root = list.closest<HTMLElement>('[class*="autocomplete_"]') ?? list;
     if (autocompleteRoot !== root && !isVisible(root)) { releaseAutocomplete(); return []; }
-    const choices = [...list.querySelectorAll<HTMLElement>('[role="option"], [role="menuitem"], [role="tab"]')];
+    const containers = new Set<HTMLElement>([list]);
+    // Follow native ownership into nested menus, including portaled argument/value pickers.
+    for (const container of containers) {
+        for (const trigger of container.querySelectorAll<HTMLElement>("[aria-controls], [aria-owns]")) {
+            if (trigger.getAttribute("aria-expanded") === "false") continue;
+            const owned = `${trigger.getAttribute("aria-controls") ?? ""} ${trigger.getAttribute("aria-owns") ?? ""}`.trim().split(/\s+/);
+            for (const id of owned) {
+                const popup = document.getElementById(id);
+                if (popup && popup !== document.body && popup !== editor && popup.querySelector(autocompleteChoices)
+                    && (autocompleteMirrors.has(popup) || isVisible(popup))) containers.add(popup);
+            }
+        }
+    }
+    const choices = [...containers].flatMap(container => [...container.querySelectorAll<HTMLElement>(autocompleteChoices)]);
+    const mirrors = new Set([root, ...[...containers].filter(container => container !== list)]);
+    for (const old of autocompleteMirrors) if (!mirrors.has(old)) { old.removeAttribute("data-hh-autocomplete-mirror"); autocompleteMirrors.delete(old); }
     const categories = [...root.querySelectorAll<HTMLElement>('[role="list"] [role="button"], [role="tablist"] [role="tab"]')];
-    const rows = [...new Set([...choices, ...categories])]
-        .filter(el => el.getAttribute("aria-disabled") !== "true" && el.getAttribute("aria-hidden") !== "true" && !el.closest('[hidden], [inert]'))
+    const candidates = [...new Set([...choices, ...categories])];
+    const rows = candidates.filter(el => !candidates.some(parent => parent !== el && parent.contains(el)))
+        .filter(el => el.getAttribute("aria-disabled") !== "true" && el.getAttribute("aria-hidden") !== "true" && !el.closest('[hidden], [inert], [aria-hidden="true"]') && !el.matches(":disabled"))
         .map(target => ({ target, label: (categories.includes(target) ? "Browse: " : "") + (target.getAttribute("aria-label") || target.querySelector('[class*="autocompleteRowHeading"]')?.textContent || target.textContent || "").replace(/\s+/g, " ").trim() }))
         .filter(row => !!row.label);
     if (!rows.length) { releaseAutocomplete(); return []; }
     if (autocompleteRoot !== root) { releaseAutocomplete(); autocompleteRoot = root; }
-    root.setAttribute("data-hh-autocomplete-mirror", "");
+    for (const popup of mirrors) { popup.setAttribute("data-hh-autocomplete-mirror", ""); autocompleteMirrors.add(popup); }
     return rows;
 }
 let suggestions: string[] = [];
@@ -4292,7 +4311,8 @@ function acceptSuggestion(i = suggIndex) {
     if (discordSuggestions.length) {
         const row = discordSuggestions[i];
         if (!row?.target.isConnected) { updateSuggestions(); return; }
-        row.target.click(); // Preserve Discord's native insertion, command selection and argument/submenu transitions.
+        const target = row.target.matches('[role="gridcell"], [role="treeitem"]') ? row.target.querySelector<HTMLElement>('button, [role="button"]') ?? row.target : row.target;
+        target.click(); // Preserve Discord's native insertion, command selection and argument/submenu transitions.
         suggIndex = 0; scheduleSuggestions();
         return;
     }

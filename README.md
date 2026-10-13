@@ -2,12 +2,12 @@
 
 **Download installers — extract the ZIP and launch:**
 
-- [Windows x64](https://github.com/AhmxdNYC/discord-handheld-controls/releases/download/v6.31.0/HandheldControls-Windows-x64.zip) — open `HandheldControls-Installer.exe`
-- [Linux x64](https://github.com/AhmxdNYC/discord-handheld-controls/releases/download/v6.31.0/HandheldControls-Linux-x64.zip) — open `Install.desktop`
-- [macOS Apple Silicon](https://github.com/AhmxdNYC/discord-handheld-controls/releases/download/v6.31.0/HandheldControls-macOS-AppleSilicon.zip) — open `Install.command`
-- [macOS Intel](https://github.com/AhmxdNYC/discord-handheld-controls/releases/download/v6.31.0/HandheldControls-macOS-Intel.zip) — open `Install.command`
+- [Windows x64](https://github.com/AhmxdNYC/discord-handheld-controls/releases/download/v6.32.0/HandheldControls-Windows-x64.zip) — open `HandheldControls-Installer.exe`
+- [Linux x64](https://github.com/AhmxdNYC/discord-handheld-controls/releases/download/v6.32.0/HandheldControls-Linux-x64.zip) — open `Install.desktop`
+- [macOS Apple Silicon](https://github.com/AhmxdNYC/discord-handheld-controls/releases/download/v6.32.0/HandheldControls-macOS-AppleSilicon.zip) — open `Install.command`
+- [macOS Intel](https://github.com/AhmxdNYC/discord-handheld-controls/releases/download/v6.32.0/HandheldControls-macOS-Intel.zip) — open `Install.command`
 
-No Node.js, Git or build tools needed. Choose Discord/Vencord, BetterDiscord or Vesktop in the installer menu. These are preview builds; live controller testing is pending. [Release details and checksums](https://github.com/AhmxdNYC/discord-handheld-controls/releases/tag/v6.31.0).
+No Node.js, Git or build tools needed. Choose Discord/Vencord, BetterDiscord or Vesktop in the installer menu. These are preview builds; live controller testing is pending. [Release details and checksums](https://github.com/AhmxdNYC/discord-handheld-controls/releases/tag/v6.32.0).
 
 Navigate Discord with a controller and type with an on-screen keyboard. Built for an ROG Ally X running Bazzite; the main plugin reads standard controllers through Chromium's Gamepad API.
 
