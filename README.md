@@ -2,12 +2,12 @@
 
 **Download installers — extract the ZIP and launch:**
 
-- [Windows x64](https://github.com/AhmxdNYC/discord-handheld-controls/releases/download/v6.30.0/HandheldControls-Windows-x64.zip) — open `HandheldControls-Installer.exe`
-- [Linux x64](https://github.com/AhmxdNYC/discord-handheld-controls/releases/download/v6.30.0/HandheldControls-Linux-x64.zip) — open `Install.desktop`
-- [macOS Apple Silicon](https://github.com/AhmxdNYC/discord-handheld-controls/releases/download/v6.30.0/HandheldControls-macOS-AppleSilicon.zip) — open `Install.command`
-- [macOS Intel](https://github.com/AhmxdNYC/discord-handheld-controls/releases/download/v6.30.0/HandheldControls-macOS-Intel.zip) — open `Install.command`
+- [Windows x64](https://github.com/AhmxdNYC/discord-handheld-controls/releases/download/v6.31.0/HandheldControls-Windows-x64.zip) — open `HandheldControls-Installer.exe`
+- [Linux x64](https://github.com/AhmxdNYC/discord-handheld-controls/releases/download/v6.31.0/HandheldControls-Linux-x64.zip) — open `Install.desktop`
+- [macOS Apple Silicon](https://github.com/AhmxdNYC/discord-handheld-controls/releases/download/v6.31.0/HandheldControls-macOS-AppleSilicon.zip) — open `Install.command`
+- [macOS Intel](https://github.com/AhmxdNYC/discord-handheld-controls/releases/download/v6.31.0/HandheldControls-macOS-Intel.zip) — open `Install.command`
 
-No Node.js, Git or build tools needed. Choose Discord/Vencord, BetterDiscord or Vesktop in the installer menu. These are preview builds; live controller testing is pending. [Release details and checksums](https://github.com/AhmxdNYC/discord-handheld-controls/releases/tag/v6.30.0).
+No Node.js, Git or build tools needed. Choose Discord/Vencord, BetterDiscord or Vesktop in the installer menu. These are preview builds; live controller testing is pending. [Release details and checksums](https://github.com/AhmxdNYC/discord-handheld-controls/releases/tag/v6.31.0).
 
 Navigate Discord with a controller and type with an on-screen keyboard. Built for an ROG Ally X running Bazzite; the main plugin reads standard controllers through Chromium's Gamepad API.
 
@@ -18,6 +18,7 @@ HandheldControls is available as a **Vencord custom plugin** for Vesktop/officia
 - Automatic input switching: real mouse movement, clicks, scrolling, or typing restores your normal theme immediately; controller input brings back controller navigation. No live validation of this new switching behavior yet.
 
 - Theme-aware controller connection icons in the native header just left of Inbox, including multiple-controller counts.
+- Controller keyboard suggestions mirror Discord autocomplete for mentions, commands and their native next-step choices.
 - Section navigation for servers, channels, messages, account controls, settings and menus.
 - Lock into a section, scroll, open context menus and switch servers/channels.
 - On-screen and split-stick keyboards, word suggestions and stick calibration.

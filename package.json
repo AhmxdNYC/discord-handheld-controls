@@ -1,6 +1,6 @@
 {
   "name": "discord-handheld-controls",
-  "version": "6.30.0",
+  "version": "6.31.0",
   "private": true,
   "description": "Controller navigation and an on-screen keyboard for Discord through Vencord and Vesktop",
   "license": "GPL-3.0-or-later",
@@ -11,7 +11,7 @@
     "inject": "node scripts/inject.mjs",
     "uninject": "node scripts/inject.mjs --uninstall",
     "build:betterdiscord": "node scripts/build-betterdiscord.mjs",
-    "test": "node --test scripts/setup.test.mjs scripts/runtime.test.mjs scripts/input-transitions.test.mjs scripts/input-modality.test.mjs betterdiscord/host.test.mjs scripts/controller-status.test.mjs"
+    "test": "node --test scripts/setup.test.mjs scripts/runtime.test.mjs scripts/input-transitions.test.mjs scripts/input-modality.test.mjs betterdiscord/host.test.mjs scripts/controller-status.test.mjs scripts/discord-suggestions.test.mjs"
   },
   "engines": {
     "node": ">=22"

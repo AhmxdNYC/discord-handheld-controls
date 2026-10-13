@@ -317,7 +317,7 @@ function opt<T = any>(key: string): T {
     return (v === undefined || v === null || v === "" ? OPT_DEFAULTS[key] : v) as T;
 }
 
-const VERSION = "v6.30";
+const VERSION = "v6.31";
 const brandHtml = `<a href="https://github.com/AhmxdNYC/discord-handheld-controls" target="_blank" rel="noopener noreferrer" aria-label="Handheld Controls on GitHub">Handheld × Controller</a>`;
 // Discord's own message sending (used only if pressing Enter in the box doesn't send)
 const MessageActions = findByPropsLazy("sendMessage", "editMessage");
@@ -3417,6 +3417,7 @@ function tick() {
     try {
         tickInner();
         if (frame % 30 === 0) updateControllerStatus();
+        if (controllerActive && kbEl && frame % 6 === 0) updateSuggestions();
         const idle = performance.now() - lastPadUse > 15000 && !kbEl && !panelEl && !calibEl && !helpEl;
         if (controllerActive && (!idle || frame % 30 === 0)) updateOverlays();
         if (controllerActive && frame % 4 === 0) updateHints();
@@ -4175,6 +4176,33 @@ function suggestWords(prefix: string, prev: string | null): string[] {
     return [...scored.entries()].filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([w]) => w);
 }
 
+const escapeSuggestion = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+type DiscordSuggestion = { target: HTMLElement; label: string; };
+let discordSuggestions: DiscordSuggestion[] = [];
+let autocompleteRoot: HTMLElement | null = null;
+let suggestionObserver: MutationObserver | null = null;
+function releaseAutocomplete() {
+    autocompleteRoot?.removeAttribute("data-hh-autocomplete-mirror");
+    autocompleteRoot = null; discordSuggestions = [];
+}
+function readDiscordSuggestions(): DiscordSuggestion[] {
+    const editor = kbTarget();
+    if (!controllerActive || !kbEl || !editor) { releaseAutocomplete(); return []; }
+    const ids = `${editor.getAttribute("aria-controls") ?? ""} ${editor.getAttribute("aria-owns") ?? ""}`.trim().split(/\s+/);
+    const linked = ids.map(id => document.getElementById(id)).find(el => el?.matches('[role="listbox"], [role="menu"]') || el?.querySelector('[role="option"]'));
+    const list = linked as HTMLElement | undefined;
+    if (!list || !list.isConnected || list.getAttribute("aria-hidden") === "true") { releaseAutocomplete(); return []; }
+    const root = list.closest<HTMLElement>('[class*="autocomplete_"]') ?? list;
+    if (autocompleteRoot !== root && !isVisible(root)) { releaseAutocomplete(); return []; }
+    const rows = [...list.querySelectorAll<HTMLElement>('[role="option"], [role="menuitem"], [role="tab"]')]
+        .filter(el => el.getAttribute("aria-disabled") !== "true" && el.getAttribute("aria-hidden") !== "true" && !el.closest('[hidden], [inert]'))
+        .map(target => ({ target, label: (target.getAttribute("aria-label") || target.querySelector('[class*="autocompleteRowHeading"]')?.textContent || target.textContent || "").replace(/\s+/g, " ").trim() }))
+        .filter(row => !!row.label);
+    if (!rows.length) { releaseAutocomplete(); return []; }
+    if (autocompleteRoot !== root) { releaseAutocomplete(); autocompleteRoot = root; }
+    root.setAttribute("data-hh-autocomplete-mirror", "");
+    return rows;
+}
 let suggestions: string[] = [];
 let suggIndex = 0;
 /** The word being typed (just before the cursor) and the word before it. */
@@ -4189,20 +4217,24 @@ function currentWord(): { prefix: string; prev: string | null; } {
 function updateSuggestions() {
     if (!kbEl) return;
     const { prefix, prev } = currentWord();
-    const next = suggestWords(prefix, prev);
+    discordSuggestions = readDiscordSuggestions();
+    const next = discordSuggestions.length ? discordSuggestions.map(row => row.label) : suggestWords(prefix, prev);
     if (next.join() !== suggestions.join()) suggIndex = 0;
     suggestions = next;
     suggPrefix = prefix;
     const html = suggHtml();
+    const heading = kbEl.querySelector(".hh-side-r .hh-side-label");
+    if (heading) heading.textContent = discordSuggestions.length ? "Discord suggestions" : "Suggestions";
     // (the grid / wheel show them in a bar above the keys; the split keyboard in its right-hand panel, as a list)
     for (const bar of kbEl.querySelectorAll(".hh-sugg")) if (bar.innerHTML !== html) bar.innerHTML = html;
     const list = kbEl.querySelector(".hh-sugg-list");
     if (list) {
         const keep = (w: string) => suggPrefix && /[A-Z]/.test(suggPrefix[0]) ? w[0].toUpperCase() + w.slice(1) : w;
         const rows = suggestions.length
-            ? suggestions.map((w, i) => `<div class="hh-sugg-row ${i === suggIndex ? "sel" : ""}" data-i="${i}"><span>${keep(w)}</span>${i === suggIndex ? badgeHtml("X") : ""}</div>`).join("")
+            ? suggestions.map((w, i) => `<div class="hh-sugg-row ${i === suggIndex ? "sel" : ""}" data-i="${i}"><span>${escapeSuggestion(keep(w))}</span>${i === suggIndex ? badgeHtml("X") : ""}</div>`).join("")
             : `<div class="hh-sugg-empty">Start a word…</div>`;
         if (list.innerHTML !== rows) list.innerHTML = rows;
+        list.querySelector(`[data-i="${suggIndex}"]`)?.scrollIntoView({block: "nearest"});
     }
     // live preview of the message (its end), so you don't have to look up at the box
     const pv = kbEl.querySelector(".hh-preview");
@@ -4250,11 +4282,18 @@ function updateSuggestions() {
 let suggPrefix = "";
 function suggHtml() {
     const keep = (w: string) => suggPrefix && /[A-Z]/.test(suggPrefix[0]) ? w[0].toUpperCase() + w.slice(1) : w;
-    return suggestions.map((w, i) => `<div class="hh-sugg-chip ${i === suggIndex ? "sel" : ""}" data-i="${i}">${keep(w)}</div>`).join("")
+    return suggestions.map((w, i) => `<div class="hh-sugg-chip ${i === suggIndex ? "sel" : ""}" data-i="${i}">${escapeSuggestion(keep(w))}</div>`).join("")
         + (suggestions.length ? `<div class="hh-sugg-hint">${badgeHtml(kbStyle() === "split" ? "X" : "R3")} use${kbStyle() === "split" ? ` ${badgeHtml("DPAD")}▼ next` : ""}</div>` : "");
 }
 /** Put the chosen suggestion in place of the word being typed, plus a space. */
 function acceptSuggestion(i = suggIndex) {
+    if (discordSuggestions.length) {
+        const row = discordSuggestions[i];
+        if (!row?.target.isConnected) { updateSuggestions(); return; }
+        row.target.click(); // Preserve Discord's native insertion, command selection and argument/submenu transitions.
+        suggIndex = 0; scheduleSuggestions();
+        return;
+    }
     const w = suggestions[i], f = kbTarget();
     if (!w || !f) return;
     const { prefix } = currentWord();
@@ -5771,6 +5810,7 @@ function dropPopout() {
     lifted = null;
 }
 function closeKeyboard() {
+    releaseAutocomplete();
     if (!kbEl) return;
     const el = kbEl;
     if (pickerLayer) closePicker();
@@ -5810,6 +5850,12 @@ function kbFlashSend() {
 }
 
 function handleKeyboard(dirFire: Dir | null, jp: (b: Btn) => boolean, pressed: boolean[], pad: Gamepad) {
+    if (discordSuggestions.length && jp(Btn.B)) {
+        const editor = kbTarget();
+        if (editor) pressKey("Escape", editor);
+        releaseAutocomplete(); scheduleSuggestions();
+        return;
+    }
     // a GIF / sticker / emoji picker is open: the D-pad, A and B are its; the sticks still type (its search)
     if (pickerLayer && handlePicker(jp, pressed)) {
         if (!pickerSearch || pkJustSearched) return; // (the Y that started searching isn't also "123")
@@ -6143,7 +6189,8 @@ html[data-hh-shift="slide"] [class*="layers_"] > [class*="baseLayer"] {
 .hh-legend-row span:last-child { overflow: hidden; text-overflow: ellipsis; }
 .hh-legend-btn { flex: none; width: 22px; height: 24px; display: flex; align-items: center; justify-content: center; }
 .hh-side .hh-legend-btn .hh-badge { transform: scale(.6); margin: -8px; }
-.hh-sugg-list { display: flex; flex-direction: column; gap: 5px; }
+.hh-sugg-list { display: flex; flex-direction: column; gap: 5px; min-height: 0; overflow-y: auto; }
+[data-hh-autocomplete-mirror] { visibility: hidden !important; pointer-events: none !important; }
 .hh-sugg-row { display: flex; align-items: center; justify-content: space-between; min-height: 40px; padding: 0 14px; border-radius: 14px;
   background: transparent; border: 1.5px solid rgb(255 255 255 / .18); font-size: 17px; font-weight: 600; color: var(--text-normal, #dbdee1);
   cursor: pointer; box-sizing: border-box; }
@@ -6510,6 +6557,10 @@ export default definePlugin({
         document.addEventListener("contextmenu", onContextMenuCapture, true);
         document.addEventListener("keydown", onBackKey, true);
         watchMenusEarly();
+        suggestionObserver = new MutationObserver(muts => {
+            if (controllerActive && kbEl && muts.some(m => !(m.target instanceof Element ? m.target : m.target.parentElement)?.closest(".hh-kb"))) updateSuggestions();
+        });
+        suggestionObserver.observe(document.body, {childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["aria-controls", "aria-owns", "aria-selected"]});
         document.addEventListener("click", onMenuClickCapture, true);
         prevPressed = []; extTransitions = []; sampledExtPad = extPad;
         if ((settings.store.prefsVersion ?? 0) < 2) {
@@ -6547,6 +6598,7 @@ export default definePlugin({
 
     stop() {
         cancelAnimationFrame(raf);
+        suggestionObserver?.disconnect(); suggestionObserver = null; releaseAutocomplete();
         controllerStatusEl?.remove(); controllerStatusEl = null;
         menuObserver?.disconnect(); menuObserver = null;
         document.removeEventListener("keydown", onBackKey, true);
