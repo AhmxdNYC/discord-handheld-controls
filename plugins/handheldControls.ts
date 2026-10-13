@@ -317,7 +317,7 @@ function opt<T = any>(key: string): T {
     return (v === undefined || v === null || v === "" ? OPT_DEFAULTS[key] : v) as T;
 }
 
-const VERSION = "v6.28";
+const VERSION = "v6.29";
 const brandHtml = `<a href="https://github.com/AhmxdNYC/discord-handheld-controls" target="_blank" rel="noopener noreferrer" aria-label="Handheld Controls on GitHub">Handheld × Controller</a>`;
 // Discord's own message sending (used only if pressing Enter in the box doesn't send)
 const MessageActions = findByPropsLazy("sendMessage", "editMessage");
@@ -2702,7 +2702,7 @@ function updateControllerStatus() {
     const count = names.length;
     if (controllerStatusEl.dataset.count !== String(count)) {
         controllerStatusEl.dataset.count = String(count);
-        const icon = '<span aria-hidden="true" style="display:inline-flex;align-items:center;justify-content:center;width:1.25em;height:1.25em;border-radius:.35em;background:color-mix(in srgb,var(--status-positive,currentColor) 15%,transparent);border:1px solid color-mix(in srgb,var(--status-positive,currentColor) 50%,transparent);box-sizing:border-box">🎮</span>';
+        const icon = '<span aria-hidden="true" style="display:inline-flex;align-items:center;justify-content:center;width:1.5em;height:1.5em;border-radius:.4em;background:color-mix(in srgb,var(--status-positive,currentColor) 15%,transparent);border:1px solid color-mix(in srgb,var(--status-positive,currentColor) 50%,transparent);box-sizing:border-box">🎮</span>';
         controllerStatusEl.innerHTML = icon.repeat(Math.min(count, 3)) + `<span style="font-size:.6em;font-weight:600">${count > 1 ? `${count} connected` : "Connected"}</span>`;
     }
     const label = `${count} controller${count === 1 ? "" : "s"} detected: ${names.join(", ")}`;
