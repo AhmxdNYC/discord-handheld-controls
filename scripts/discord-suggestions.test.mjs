@@ -5,11 +5,11 @@ import {transformSync} from 'esbuild';
 const source=readFileSync(new URL('../plugins/handheldControls.ts',import.meta.url),'utf8');
 const helpers=transformSync(source.slice(source.indexOf('const escapeSuggestion ='),source.indexOf('let suggestions: string[] = [];')),{loader:'ts'}).code;
 function setup(){
- const attrs=new Map(),root={setAttribute:(k,v)=>attrs.set(k,v),removeAttribute:k=>attrs.delete(k)};
+ const attrs=new Map(),root={querySelectorAll:()=>[],setAttribute:(k,v)=>attrs.set(k,v),removeAttribute:k=>attrs.delete(k)};
  const item=(label,disabled=false)=>({textContent:label,isConnected:true,getAttribute:k=>k==='aria-disabled'&&disabled?'true':null,closest:()=>null,querySelector:()=>null,click(){this.clicks=(this.clicks??0)+1;}});
  const rows=[item('/command'),item('nested argument'),item('disabled',true)];
  const list={isConnected:true,matches:()=>true,getAttribute:()=>null,closest:()=>root,querySelectorAll:()=>rows};
- const editor={getAttribute:k=>k==='aria-controls'?'native-popup':null};
+ const editor={closest:()=>null,getAttribute:k=>k==='aria-controls'?'native-popup':null};
  const document={getElementById:id=>id==='native-popup'?list:null};
  const api=new Function('document','kbTarget','isVisible',`let controllerActive=true,kbEl={};${helpers};return {readDiscordSuggestions,releaseAutocomplete,escapeSuggestion,setActive:v=>controllerActive=v};`)(document,()=>editor,()=>true);
  return {...api,attrs,rows,list,editor};
@@ -34,4 +34,8 @@ test('native suggestion activation uses Discord action without word replacement 
  const accept=new Function('discordSuggestions','scheduleSuggestions','updateSuggestions',`let suggIndex=0;${acceptCode};return acceptSuggestion;`)([{target}],()=>scheduled++,()=>{});
  accept();assert.equal(clicks,1);assert.equal(scheduled,1);
  target.isConnected=false;accept();assert.equal(clicks,1);
+});
+
+test('slash command lists inside the editor form work without aria-controls',()=>{
+ const p=setup();p.editor.getAttribute=()=>null;p.editor.closest=()=>({querySelector:()=>p.list});assert.equal(p.readDiscordSuggestions().length,2);assert.ok(p.attrs.has('data-hh-autocomplete-mirror'));
 });

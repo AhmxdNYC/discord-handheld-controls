@@ -4190,13 +4190,15 @@ function readDiscordSuggestions(): DiscordSuggestion[] {
     if (!controllerActive || !kbEl || !editor) { releaseAutocomplete(); return []; }
     const ids = `${editor.getAttribute("aria-controls") ?? ""} ${editor.getAttribute("aria-owns") ?? ""}`.trim().split(/\s+/);
     const linked = ids.map(id => document.getElementById(id)).find(el => el?.matches('[role="listbox"], [role="menu"]') || el?.querySelector('[role="option"]'));
-    const list = linked as HTMLElement | undefined;
+    const list = (linked ?? editor.closest("form")?.querySelector('[class*="autocomplete_"] [role="listbox"]')) as HTMLElement | undefined;
     if (!list || !list.isConnected || list.getAttribute("aria-hidden") === "true") { releaseAutocomplete(); return []; }
     const root = list.closest<HTMLElement>('[class*="autocomplete_"]') ?? list;
     if (autocompleteRoot !== root && !isVisible(root)) { releaseAutocomplete(); return []; }
-    const rows = [...list.querySelectorAll<HTMLElement>('[role="option"], [role="menuitem"], [role="tab"]')]
+    const choices = [...list.querySelectorAll<HTMLElement>('[role="option"], [role="menuitem"], [role="tab"]')];
+    const categories = [...root.querySelectorAll<HTMLElement>('[role="list"] [role="button"], [role="tablist"] [role="tab"]')];
+    const rows = [...new Set([...choices, ...categories])]
         .filter(el => el.getAttribute("aria-disabled") !== "true" && el.getAttribute("aria-hidden") !== "true" && !el.closest('[hidden], [inert]'))
-        .map(target => ({ target, label: (target.getAttribute("aria-label") || target.querySelector('[class*="autocompleteRowHeading"]')?.textContent || target.textContent || "").replace(/\s+/g, " ").trim() }))
+        .map(target => ({ target, label: (categories.includes(target) ? "Browse: " : "") + (target.getAttribute("aria-label") || target.querySelector('[class*="autocompleteRowHeading"]')?.textContent || target.textContent || "").replace(/\s+/g, " ").trim() }))
         .filter(row => !!row.label);
     if (!rows.length) { releaseAutocomplete(); return []; }
     if (autocompleteRoot !== root) { releaseAutocomplete(); autocompleteRoot = root; }
