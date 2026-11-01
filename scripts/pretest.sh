@@ -6,7 +6,7 @@ pass() { echo "PASS  $1"; }
 fail() { echo "FAIL  $1"; rc=1; }
 
 # 1. Steam BPM window must not hold STEAM_INPUT_FOCUS while Vesktop runs (it swallows the pad)
-if pgrep -f -i vesktop >/dev/null 2>&1; then
+if pgrep -x vesktop.bin >/dev/null 2>&1; then  # exact process name: -f would match any shell whose command line mentions vesktop
     changed=0
     for w in $(DISPLAY=:0 xwininfo -root -tree 2>/dev/null | awk '/^ *0x/ {print $1}'); do
         f=$(DISPLAY=:0 xprop -id "$w" STEAM_INPUT_FOCUS 2>/dev/null)
@@ -24,7 +24,7 @@ else
 fi
 
 # 2. pad bridge + debug port with a discord page
-pgrep -f hh-pad-bridge.py >/dev/null 2>&1 && pass "hh-pad-bridge.py running" || fail "hh-pad-bridge.py not running"
+pgrep -f "python3 .*hh-pad-bridge.py" >/dev/null 2>&1 && pass "hh-pad-bridge.py running" || fail "hh-pad-bridge.py not running"
 if curl -s --max-time 3 http://127.0.0.1:9222/json/list | grep -q 'discord.com'; then pass "debug port 9222 has a discord.com page"; else fail "no discord.com page on 127.0.0.1:9222"; fi
 
 # 3. plugin started
