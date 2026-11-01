@@ -112,6 +112,8 @@ const settings = definePluginSettings({
             { label: "Keys", value: "keys", default: true },
         ],
     },
+    // one-time migration marker (see start()); never shown
+    migratedKbStartOn: { type: OptionType.BOOLEAN, description: "Internal: keyboardStartOn default migration done", default: false, hidden: true },
     backButton1: { type: OptionType.SELECT, description: "M1 / left back button (map it in Steam to the F13 or F9 key)", options: BACK_ACTIONS_OPTIONS(0) },
     backButton2: { type: OptionType.SELECT, description: "M2 / right back button (map it in Steam to the F14 or F10 key)", options: BACK_ACTIONS_OPTIONS(1) },
     backButton3: { type: OptionType.SELECT, description: "Back button 3 (map it in Steam to the F15 or Insert key)", options: BACK_ACTIONS_OPTIONS(2) },
@@ -6571,6 +6573,12 @@ export default definePlugin({
     settings,
 
     start() {
+        // old versions defaulted "Keyboard opens on" to Box buttons and Vencord saved it; move upgraders to the new default
+        // once (anyone who picks Box buttons afterwards keeps it)
+        if (!(settings.store as any).migratedKbStartOn) {
+            if ((settings.store as any).keyboardStartOn === "box") (settings.store as any).keyboardStartOn = "keys";
+            (settings.store as any).migratedKbStartOn = true;
+        }
         styleEl = document.createElement("style");
         styleEl.id = "hh-controls-style";
         styleEl.textContent = CSS + CSS_EXTRA;
