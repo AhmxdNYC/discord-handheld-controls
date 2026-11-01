@@ -3,6 +3,7 @@
 
 Overrides navigator.getGamepads with a fake standard pad and sets window.__hhPad so the plugin prefers it over the
 evdev bridge. Usage:  vpad.py eval "<js>" | press A [ms] | hold DOWN ms | seq "A DOWN DOWN B" | shot out.png | mouse X Y | off
+       vpad.py type CH   (aim the matching split-keyboard key with the stick, pull its trigger; prints 'selected' / 'missed')
 Buttons: A B X Y LB RB LT RT VIEW MENU L3 R3 UP DOWN LEFT RIGHT. Presses default 120 ms, 150 ms gap.
 """
 import asyncio, base64, json, sys, urllib.request
@@ -39,6 +40,22 @@ async def main(argv):
         elif cmd == "seq":
             for t in args[0].split():
                 b, _, ms = t.partition(":"); await press(b, int(ms or 120))
+        elif cmd == "type":
+            await ev(INSTALL)
+            k = await ev("""(() => { const el = [...document.querySelectorAll('.hh-kb .hh-ckey[data-ch]')].find(e => e.dataset.ch.toLowerCase() === %s);
+              return el ? { k: el.dataset.k, left: parseFloat(el.style.left), top: parseFloat(el.style.top) } : null; })()""" % json.dumps(args[0].lower()))
+            if not k: print("missed: key not on keyboard"); sys.exit(1)
+            h = int(k["k"].split("-")[0]); dx, dy = (k["left"] - 50) / 40, (k["top"] - 50) / 40
+            if abs(dx) < 1e-3 and abs(dy) < 1e-3: sx = sy = 0.0
+            elif (abs(dy) < 1e-3 and abs(dx) < 0.6) or (abs(dx) < 1e-3 and abs(dy) < 0.6):
+                sx, sy = (0.5 if dx > 0 else -0.5 if dx < 0 else 0.0), (0.5 if dy > 0 else -0.5 if dy < 0 else 0.0)
+            else:
+                m = (dx * dx + dy * dy) ** 0.5; sx, sy = 0.99 * dx / m, 0.99 * dy / m
+            await ev(f"window.__vp.a[{2 * h}]={sx}; window.__vp.a[{2 * h + 1}]={sy}"); await asyncio.sleep(0.25)  # > 70 ms settle
+            sel = await ev(f"!!document.querySelector('.hh-kb [data-k=\"{k['k']}\"].sel')")
+            await press("RT" if h else "LT", 150)
+            await ev(f"window.__vp.a[{2 * h}]=0; window.__vp.a[{2 * h + 1}]=0"); await asyncio.sleep(0.25)
+            print("selected" if sel else "missed: key not selected"); sys.exit(0 if sel else 1)
         elif cmd == "shot":
             r = await call("Page.captureScreenshot", format="png")
             open(args[0], "wb").write(base64.b64decode(r["result"]["data"])); print("saved", args[0])
