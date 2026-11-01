@@ -108,8 +108,8 @@ const settings = definePluginSettings({
         type: OptionType.SELECT,
         description: "When the keyboard opens, start on the message box's buttons (B / ▼ to the keys) or straight on the keys",
         options: [
-            { label: "Box buttons", value: "box", default: true },
-            { label: "Keys", value: "keys" },
+            { label: "Box buttons", value: "box" },
+            { label: "Keys", value: "keys", default: true },
         ],
     },
     backButton1: { type: OptionType.SELECT, description: "M1 / left back button (map it in Steam to the F13 or F9 key)", options: BACK_ACTIONS_OPTIONS(0) },
@@ -308,7 +308,7 @@ const BACK_DEFAULTS = ["mute", "type", "switcher", "back"];
 const BACK_NAMES = ["M1", "M2", "Back 3", "Back 4"];
 const OPT_DEFAULTS: Record<string, unknown> = {
     backButton1: "mute", backButton2: "type", backButton3: "switcher", backButton4: "back",
-    menuDrawer: true, menuStyle: "blend", keyboardChatOnly: true, keyboardStartOn: "box", showHints: true, buttonLayout: "auto", buttonColors: "auto", hintsMoveTitle: true, keyboardHideTitle: true, keyboardSlimHeader: true, drawerCover: true, drawerSide: "lists", drawerWidth: 360, appShift: "shrink",
+    menuDrawer: true, menuStyle: "blend", keyboardChatOnly: true, keyboardStartOn: "keys", showHints: true, buttonLayout: "auto", buttonColors: "auto", hintsMoveTitle: true, keyboardHideTitle: true, keyboardSlimHeader: true, drawerCover: true, drawerSide: "lists", drawerWidth: 360, appShift: "shrink",
     onScreenKeyboard: true, keyboardMode: "grid", keyboardHeight: 45, sliderNotches: 10,
     splitStyle: "balanced", splitRollThrough: false, splitEdge: "strict", splitMoreInner: false, gameModeScale: 200, splitSensitivity: 1, holdSpeed: 1, highlightColor: "theme", keyboardColor: "same", keyboardSound: true, keyboardVolume: 40,
 };
@@ -2084,7 +2084,11 @@ function switchServer(step: 1 | -1) {
     // (stops at the first / last server — no looping round)
     const next = i < 0 ? (step > 0 ? 0 : ids.length - 1) : i + step;
     if (next < 0 || next >= ids.length) return toast(step > 0 ? "Last server" : "First server", 700);
-    NavigationRouter.transitionToGuild(ids[next]);
+    // land on the channel last viewed there (the bare guild route opens its first channel, e.g. #rules)
+    let last: string | undefined;
+    try { last = (SelectedChannelStore as any).getLastSelectedChannelId?.(ids[next]); } catch { }
+    if (last && ChannelStore.getChannel(last)) (NavigationRouter as any).transitionToGuild(ids[next], last);
+    else NavigationRouter.transitionToGuild(ids[next]);
 }
 
 function switchChannel(step: 1 | -1) {
@@ -3178,6 +3182,12 @@ function toggleHelp(force?: boolean, autoCloseMs = 0) {
             </div>
         </div>`;
     document.body.append(helpEl);
+    // the card is overflow:hidden: at a high UI scale (small viewport) shrink it until the last row fits
+    const card = helpEl.querySelector<HTMLElement>(".hh-help-card");
+    if (card) requestAnimationFrame(() => {
+        const over = card.scrollHeight - card.clientHeight, box = card.getBoundingClientRect().height;
+        if (over > 0 && box > 0) card.style.zoom = String(Math.max(.4, box / (box + over)));
+    });
     if (autoCloseMs) helpTimer = window.setTimeout(() => toggleHelp(false), autoCloseMs);
 }
 
