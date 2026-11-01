@@ -1,0 +1,1 @@
+- [ ] Real controller check of Discord v6.34 on the Ally | Open Vesktop from Steam (Game Mode), press a few buttons: move with D-pad, A into the chat, type a word with the on-screen keyboard (DOWN first to reach keys), press the back paddles once; say if anything feels wrong | ally
