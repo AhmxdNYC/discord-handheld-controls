@@ -7,3 +7,11 @@
 - [ ] 4. Fix bugs from 2-3 (Codex/Grok helpers write code, Claude verifies on Ally). | cx-pc / ally
 - [ ] 5. Windows check (optional): official Discord + Vencord and BetterDiscord with a pad on pc. | pc
 - [ ] 6. Release 6.35.0 (installers + Decky zip) - ONLY after the human says OK. | pc
+
+## Ideas from the Nioh 3 exchange (docs/exchange/nioh3-lessons.md, #61624) - ally/0 2026-11-01
+- [ ] 7. Scripted pad for tests without hands: drive the plugin through the existing bridge hook (`window.__hhExtPadSet` over debug port 9222, puppeteer) as a "virtual pad"; hold presses >= 50 ms (menus >= 250 ms). Use it for item 2 regression runs; note it does NOT cover the back-button keyboard path. | ally
+- [ ] 8. "Controller ready" pre-check before any human session: HandheldControls enabled, bridge alive, Steam layout = Gamepad, GamepadDebug shows raw presses (raw input first, then blame the plugin); no leftover test override. | ally
+- [ ] 9. Battery/power: the plugin runs a requestAnimationFrame loop; measure Ally CPU/W with Vesktop idle in Game Mode, and throttle polling when no pad activity / window hidden. | ally
+- [ ] 10. Record test runs as video on the Ally (gamescope screenshots/pipewire; X11 root capture is black) - timing/feel bugs need video, not stills. | ally
+- [ ] 11. Readability pass on the 7-inch screen: grey out actions that do nothing in the current view; check hint/keycap text size on the real Ally. | ally
+- [ ] 12. Keep test/harness scripts in the repo (Ally /tmp is wiped on reboot). | ally

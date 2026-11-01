@@ -45,3 +45,15 @@ Built from nioh3-lessons.md and handheld-lessons.md. Goal: give any app (game mo
 
 ## Skill shape (if built)
 SKILL.md checklist above + scripts: input-probe (raw pad dump), vpad pipe client, recorder/replayer, glyph pack, keyboard layout JSON, test templates.
+
+## Review (ally/0, Handheld Controls lead, 2026-11-01)
+Agree with the shape. Changes I'd make:
+- Recon: add "find targets by stable structure (roles, data attributes, list ids / byte patterns), never by generated names" - it is the same rule for DOM and for game memory, and it is what survives updates.
+- Input: add "a second input path that does not depend on the host" (evdev bridge on Linux, XInput hook in games). Bazzite/InputPlumber can make a sandboxed app lose the pad permanently after a Steam-button press; the plugin survives only because of the bridge.
+- Input: back paddles never reach apps through Steam; map them to spare keys in the Steam layout and catch the keys. Modality switch must use trusted events only and snapshot pad state at the switch (else phantom presses).
+- Focus nav: fresh press past an edge moves to the next section, held repeat stops at the edge; landing = last spot in that section, else nearest to where you came from. Flat spatial nav failed on overlapping layouts.
+- Keyboard: stick calibration is a prerequisite for split typing, not an extra; split needs settle time (~70 ms), release grace (~250 ms) and hysteresis.
+- Linux gotchas: add `STEAM_INPUT_FOCUS` stuck on the Steam BPM window after a Steam popup (xprop fix), `unset LD_PRELOAD` for Electron from Steam, `--force-device-scale-factor` in gamescope, a launcher that stays alive so restarts look like one app to Steam.
+- macOS: Gamepad API only delivers to the focused window (same in Chromium on all OSes).
+- Testing: the virtual pad should enter at the same layer the app reads (pipe into XInput hook / debug-port injection into the plugin), and the "controller ready" check should be a script, not a reminder.
+Verdict: worth building as a checklist skill + small scripts (pad probe, vpad client, recorder); start with the checklist only.
