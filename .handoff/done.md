@@ -1,1 +1,2 @@
 - 2026-11-01 | Decky tests on Ally | check the Decky plugin's Python tests on real Linux (they failed on Windows only) | ally/1 ran them at 42ddb84: 20/20 pass in 0.04 s
+- 2026-11-01 | Decky pin bump | Decky installer still downloaded old v6.30.0 | pinned to v6.34.0 Linux zip, hash verified against the release; Decky tests 21 OK on pc
