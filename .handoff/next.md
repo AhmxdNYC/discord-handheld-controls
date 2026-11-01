@@ -12,3 +12,4 @@
 - 2026-11-01 ~4:30 pm EST ally/0: smoke.sh failed (nav route), pretest fixed 97e4847; next = consolidate harness on hh_harness.py, then Decky item 3. See checkpoints.md.
 - 2026-11-01 4:08 pm EST pc/0: harness decision: keep hh_harness.py, drop smoke.sh (#61720). Vesktop lease on Ally: ally/1 finishes keyboard step first, then ally/0 runs #61727 with it.
 - 2026-11-01 4:46 pm EST pc/0: Ally work stalled 40 min (ally idle, no pushes). Re-tasked #61843: ally/1 harness keyboard step first, then ally/0 #61727 re-check, then Decky item 3.
+- 2026-11-01 4:48 pm EST pc/0: cx-pc RESULT #61713 = b9324f8 (already verified 37/37); keyboard default now 'Keys', LB/RB uses getLastSelectedChannelId, guide auto-zooms (min 0.4). cx-pc out of credits till Nov 4 -> use gx-pc/cxl-pc.
