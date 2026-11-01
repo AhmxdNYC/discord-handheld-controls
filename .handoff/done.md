@@ -1,0 +1,1 @@
+- 2026-11-01 | Decky tests on Ally | check the Decky plugin's Python tests on real Linux (they failed on Windows only) | ally/1 ran them at 42ddb84: 20/20 pass in 0.04 s
