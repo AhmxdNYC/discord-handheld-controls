@@ -172,22 +172,30 @@ async def smoke(shots, channel=None):
     def step(name, ok, note=""): results.append((name, ok, note)); print(f"{'PASS' if ok else 'FAIL'}  {name}  {note}")
     page = await open_page(); pad = Pad(page)
     await page.ev("window.__hhPad = false"); await pad.neutral()
-    s0 = await page.ev(STATE_JS)
-    await pad.press("DOWN"); s1 = await page.ev(STATE_JS)
-    step("nav down", s1["focus"] is not None and s1["focus"] != s0["focus"], f"{s0['focus']!r} -> {s1['focus']!r}")
-    await pad.press("UP"); s2 = await page.ev(STATE_JS)
-    step("nav up", s2["focus"] is not None and s2["focus"] != s1["focus"], f"-> {s2['focus']!r}")
-    if not (await page.ev(STATE_JS))["box"] and (await page.ev("!document.querySelector('[role=\"textbox\"][data-slate-editor]')")):
+    for _ in range(3):  # leftover keyboard from an earlier run: B = back to box, again = close (only while it is open:
+        if not (await page.ev(STATE_JS))["kb"]: break  # B outside the keyboard is browser-back)
+        await pad.press("B", 250, 0.8)
+    if channel or not await page.ev("!!document.querySelector('[role=\"textbox\"][data-slate-editor][contenteditable=\"true\"]')"):
         # no message box here: go to a chat (--channel PATH, else the first DM in the list). Draft only, never sent.
-        js = f"Vencord.Webpack.Common.NavigationRouter.transitionTo({json.dumps(channel)})" if channel else \
-            "(() => { const a = document.querySelector('a[href^=\"/channels/@me/\"]'); a && a.click(); return !!a; })()"
-        await page.ev(js); await asyncio.sleep(2.0)
+        go = "Vencord.Webpack.Common.NavigationRouter.transitionTo(%s)"
+        if channel: await page.ev(go % json.dumps(channel)); await asyncio.sleep(2.0)
+        else:  # server views (e.g. read-only #rules) list no DMs: go to Home first, then open the first DM
+            await page.ev(go % '"/channels/@me"'); await asyncio.sleep(1.5)
+            await page.ev("(() => { const a = document.querySelector('a[href^=\"/channels/@me/\"]'); a && a.click(); return !!a; })()")
+            await asyncio.sleep(2.0)
+    s0 = await page.ev(STATE_JS)
+    if s0["focus"] is None: await pad.press("UP"); s0 = await page.ev(STATE_JS)  # first press only shows the focus ring
+    # UP first: a fresh chat often starts on the message box, the bottom-most item (DOWN would go nowhere)
+    await pad.press("UP"); s1 = await page.ev(STATE_JS)
+    step("nav up", s1["focus"] is not None and s1["focus"] != s0["focus"], f"{s0['focus']!r} -> {s1['focus']!r}")
+    await pad.press("DOWN"); s2 = await page.ev(STATE_JS)
+    step("nav down", s2["focus"] is not None and s2["focus"] != s1["focus"], f"-> {s2['focus']!r}")
     # open the keyboard the way a player does: Y (areas), D-pad to the message box's area, A (go in), A (type)
     has_box = await page.ev("!!document.querySelector('[role=\"textbox\"][data-slate-editor]')")
     before = (await page.ev(STATE_JS))["box"] or ""
     if has_box:
-        in_box = """(() => { const b = document.querySelector('[role="textbox"][data-slate-editor]').getBoundingClientRect();
-          const f = document.querySelector('[data-hh-focus]'); if (f && f.matches('[role="textbox"], [role="textbox"] *')) return 'item';
+        in_box = """(() => { const t = document.querySelector('[role="textbox"][data-slate-editor]'); if (!t) return ''; const b = t.getBoundingClientRect();
+          const f = document.querySelector('[data-hh-focus]'); if (f && (f.matches('[role="textbox"], [role="textbox"] *') || f.contains(document.querySelector('[role="textbox"][data-slate-editor]')))) return 'item';
           const r = document.querySelector('.hh-frame')?.getBoundingClientRect(); const cx = b.left + b.width / 2, cy = b.top + b.height / 2;
           return r && cx >= r.left && cx <= r.right && cy >= r.top && cy <= r.bottom ? 'area' : ''; })()"""
         await pad.press("Y", 250, 0.4)
@@ -195,7 +203,12 @@ async def smoke(shots, channel=None):
             if await page.ev(in_box): break
             await pad.press(btn, 120, 0.3)
         where = await page.ev(in_box)
-        if where == "area": await pad.press("A", 120, 0.4); where = await page.ev(in_box)
+        if where == "area":  # A enters the chat area on the last message; the box sits below it
+            await pad.press("A", 120, 0.4)
+            for _ in range(4):
+                where = await page.ev(in_box)
+                if where == "item": break
+                await pad.press("DOWN", 120, 0.3)
         step("pad to message box", where == "item", f"focus={(await page.ev(STATE_JS))['focus']!r}")
     if not has_box:
         step("open keyboard", False, "no message box in this view (open a channel first)")
@@ -205,6 +218,8 @@ async def smoke(shots, channel=None):
         if s3["calib"]:
             await pad.press("B", 250, 0.6); s3 = await page.ev(STATE_JS)
             step("calibration prompt skipped", not s3["calib"])
+        if s3["kb"] and not s3["split"]:  # VIEW switches the full keyboard to the split one (the one this test aims at)
+            await pad.press("VIEW", 120, 0.6); s3 = await page.ev(STATE_JS)
         step("open keyboard", s3["kb"], f"split={s3['split']}")
         if s3["kb"]:
             await page.shot(os.path.join(shots, "smoke-keyboard.png"))
@@ -217,9 +232,9 @@ async def smoke(shots, channel=None):
             for _ in range(max(0, len(typed) - len(before))): await pad.press("LB", 80, 0.12)  # LB = delete
             await asyncio.sleep(0.3); after = (await page.ev(STATE_JS))["box"] or ""
             step("text cleared (nothing sent)", after == before, f"box -> {after!r}")
-            for _ in range(3):
+            for _ in range(4):
                 if not (await page.ev(STATE_JS))["kb"]: break
-                await pad.press("B", 250, 0.5)
+                await pad.press("B", 250, 0.8)
             s4 = await page.ev(STATE_JS)
             step("close keyboard", not s4["kb"])
     await pad.neutral()
