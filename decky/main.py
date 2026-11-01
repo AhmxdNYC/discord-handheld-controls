@@ -15,9 +15,9 @@ import tempfile
 import urllib.request
 import zipfile
 
-VERSION = "6.30.0"
+VERSION = "6.34.0"
 APP = "dev.vencord.Vesktop"
-ARCHIVE_SHA256 = "1e16e82ce061de4ed03f5b7d4b7a7039848093f35f9bd06301a6663be1888dc1"
+ARCHIVE_SHA256 = "0b97eb47b2fc5953a28aa4cac1e3a88158bb4fa65c68e79996cba6d766ac9c5e"
 ARCHIVE_URL = f"https://github.com/AhmxdNYC/discord-handheld-controls/releases/download/v{VERSION}/HandheldControls-Linux-x64.zip"
 MAX_DOWNLOAD = 64 * 1024 * 1024
 MAX_EXPANDED = 160 * 1024 * 1024
