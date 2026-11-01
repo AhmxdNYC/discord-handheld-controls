@@ -3185,8 +3185,11 @@ function toggleHelp(force?: boolean, autoCloseMs = 0) {
     // the card is overflow:hidden: at a high UI scale (small viewport) shrink it until the last row fits
     const card = helpEl.querySelector<HTMLElement>(".hh-help-card");
     if (card) requestAnimationFrame(() => {
-        const over = card.scrollHeight - card.clientHeight, box = card.getBoundingClientRect().height;
-        if (over > 0 && box > 0) card.style.zoom = String(Math.max(.4, box / (box + over)));
+        // zoom also scales the card's own max-height (90vh), so the overflow would never go away: lift the cap by 1/z
+        if (card.scrollHeight > card.clientHeight && card.clientHeight > 0) {
+            const z = Math.max(.4, card.clientHeight / card.scrollHeight);
+            card.style.zoom = String(z); card.style.maxHeight = `calc(90vh / ${z})`;
+        }
     });
     if (autoCloseMs) helpTimer = window.setTimeout(() => toggleHelp(false), autoCloseMs);
 }
