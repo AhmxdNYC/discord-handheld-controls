@@ -4,9 +4,11 @@
 Overrides navigator.getGamepads with a fake standard pad and sets window.__hhPad so the plugin prefers it over the
 evdev bridge. Usage:  vpad.py eval "<js>" | press A [ms] | hold DOWN ms | seq "A DOWN DOWN B" | shot out.png | mouse X Y | off
        vpad.py type CH   (aim the matching split-keyboard key with the stick, pull its trigger; prints 'selected' / 'missed')
+       vpad.py focus     (hold a CDP session with focus emulation on until killed; smoke.sh starts it)
+Focus emulation (document.hasFocus() true even when another app is shown) is on in every command unless HH_FOCUS_EMULATION=0.
 Buttons: A B X Y LB RB LT RT VIEW MENU L3 R3 UP DOWN LEFT RIGHT. Presses default 120 ms, 150 ms gap.
 """
-import asyncio, base64, json, sys, urllib.request
+import asyncio, base64, json, os, sys, urllib.request
 import websockets
 
 BTN = dict(A=0, B=1, X=2, Y=3, LB=4, RB=5, LT=6, RT=7, VIEW=8, MENU=9, L3=10, R3=11, UP=12, DOWN=13, LEFT=14, RIGHT=15)
@@ -35,6 +37,9 @@ async def main(argv):
             await ev(INSTALL); await ev(f"window.__vp.b[{BTN[name]}]=1"); await asyncio.sleep(ms / 1000)
             await ev(f"window.__vp.b[{BTN[name]}]=0"); await asyncio.sleep(0.15)
         cmd, args = argv[0], argv[1:]
+        if os.environ.get("HH_FOCUS_EMULATION", "1") != "0": await call("Emulation.setFocusEmulationEnabled", enabled=True)
+        if cmd == "focus":
+            while True: await asyncio.sleep(3600)
         if cmd == "eval": print(json.dumps(await ev(args[0]), indent=1))
         elif cmd in ("press", "hold"): await press(args[0], int(args[1]) if len(args) > 1 else 120)
         elif cmd == "seq":

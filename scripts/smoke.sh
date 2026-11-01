@@ -11,6 +11,7 @@ p() { case "$1" in MENU*) echo "refusing to press MENU"; exit 2 ;; esac; $V pres
 kbup() { [ "$(js "!!document.querySelector('.hh-kb:not(.hh-kb-out)')")" = true ]; }
 box() { js "(document.querySelector('[role=textbox][data-slate-editor]')||{innerText:''}).innerText.replace(/\\uFEFF/g,'').trim()"; }
 
+if [ "${HH_FOCUS_EMULATION:-1}" != 0 ]; then $V focus >/dev/null 2>&1 & FOCUS_PID=$!; trap 'kill $FOCUS_PID 2>/dev/null' EXIT; sleep 1; fi
 sh scripts/pretest.sh || { echo "SMOKE FAIL (pretest)"; exit 1; }
 
 p B; echo "step  B (close guide)"

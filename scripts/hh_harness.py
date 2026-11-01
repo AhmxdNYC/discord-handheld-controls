@@ -7,6 +7,9 @@
 
 The scripted pad goes through the same hook the pad bridge uses (window.__hhExtPadSet over Vesktop's debug port 9222,
 local only), so the plugin sees it as the real controller. It does NOT cover the back-button keyboard path.
+Option --focus-emulation / --no-focus-emulation (default ON): a CDP session stays open for the whole run with
+Emulation.setFocusEmulationEnabled, so document.hasFocus() is true and the plugin reads the scripted pad even when
+gamescope shows another app (e.g. a game).
 Holds are >= 50 ms (menus >= 250 ms). Nothing is ever sent: typed text is deleted again before the keyboard closes.
 """
 import asyncio, base64, json, math, os, subprocess, sys, time, urllib.request
@@ -66,11 +69,35 @@ class Page:
         return path
 
 
+FOCUS_EMULATION = True
+
+
+async def _enable_focus(ws):
+    await ws.send(json.dumps({"id": 9001, "method": "Emulation.setFocusEmulationEnabled", "params": {"enabled": True}}))
+    while json.loads(await ws.recv()).get("id") != 9001: pass
+
+
 async def open_page():
     pages = json.load(urllib.request.urlopen(f"http://127.0.0.1:{PORT}/json/list", timeout=3))
     url = next(p for p in pages if p["type"] == "page" and "discord.com" in p["url"])["webSocketDebuggerUrl"]
     ws = await websockets.connect(url, max_size=None)
+    if FOCUS_EMULATION: await _enable_focus(ws)  # (lasts while this session is open)
     return Page(ws)
+
+
+def keep_focus_emulation():
+    """Background thread holding its own CDP session (focus emulation on) until the process ends."""
+    import threading
+    async def hold():
+        pages = json.load(urllib.request.urlopen(f"http://127.0.0.1:{PORT}/json/list", timeout=3))
+        url = next(p for p in pages if p["type"] == "page" and "discord.com" in p["url"])["webSocketDebuggerUrl"]
+        async with websockets.connect(url, max_size=None) as ws:
+            await _enable_focus(ws)
+            while True: await asyncio.sleep(3600)
+    def run():
+        try: asyncio.run(hold())
+        except Exception: pass
+    threading.Thread(target=run, daemon=True).start(); time.sleep(0.5)
 
 
 # ---------- scripted pad ----------
@@ -141,7 +168,7 @@ async def pretest(fix=True):
         await page.ev("window.__hhPad = false"); lines.append("FIXED  leftover test pad override (__hhPad) turned off")
     hb = await bridge_alive(page)
     ok &= hb > 0; lines.append(f"{'OK  ' if hb else 'FAIL'}   pad bridge alive ({hb} calls in 1.5 s)")
-    lines.append(f"{'OK  ' if st['hasFocus'] else 'WARN'}   Vesktop window has focus ({st['title']})")
+    lines.append(f"{'OK  ' if st['hasFocus'] else ('INFO' if FOCUS_EMULATION else 'WARN')}   Vesktop window has focus ({st['title']})")
     await page.ws.close()
     return ok, lines
 
@@ -244,7 +271,12 @@ async def smoke(shots, channel=None):
 
 
 def main(argv):
+    global FOCUS_EMULATION
+    FOCUS_EMULATION = "--no-focus-emulation" not in argv
     cmd = argv[0] if argv else "pretest"
+    if FOCUS_EMULATION and cmd in ("smoke", "pad", "pretest"):
+        try: keep_focus_emulation()
+        except Exception as e: print(f"INFO   focus emulation not started: {e}")
     if cmd == "pretest":
         ok, lines = asyncio.run(pretest(fix="--no-fix" not in argv))
         print("\n".join(lines)); print("PRETEST", "PASS" if ok else "FAIL"); return 0 if ok else 1
