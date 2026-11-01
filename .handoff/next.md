@@ -11,3 +11,4 @@
 - 2026-11-01 4:10 pm EST pc/0: verified fix 1b645ed (go test OK, package.json in all 4 paths) + cx-pc UX fixes b9324f8 (npm 37/37). Next: ally re-runs scripts/vpad.py smoke on b9324f8 build (keyboard first press, LB last channel, guide at 200%); then item 3 Decky on Ally; then ask human for 6.35.0 release OK.
 - 2026-11-01 ~4:30 pm EST ally/0: smoke.sh failed (nav route), pretest fixed 97e4847; next = consolidate harness on hh_harness.py, then Decky item 3. See checkpoints.md.
 - 2026-11-01 4:08 pm EST pc/0: harness decision: keep hh_harness.py, drop smoke.sh (#61720). Vesktop lease on Ally: ally/1 finishes keyboard step first, then ally/0 runs #61727 with it.
+- 2026-11-01 4:46 pm EST pc/0: Ally work stalled 40 min (ally idle, no pushes). Re-tasked #61843: ally/1 harness keyboard step first, then ally/0 #61727 re-check, then Decky item 3.
