@@ -77,6 +77,18 @@ func TestPersistentVencordDeploymentAndBackup(t *testing.T) {
 		t.Fatal("installed build depends on download folder")
 	}
 }
+func TestVencordDeploymentWritesPackageJSON(t *testing.T) {
+	root, _ := fixture(t)
+	state := t.TempDir()
+	target, err := deployVencord(root, state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	content, err := os.ReadFile(filepath.Join(target, "dist", "package.json"))
+	if err != nil || string(content) != "{}" {
+		t.Fatalf("dist/package.json missing or wrong: %q %v", content, err)
+	}
+}
 func TestBetterDiscordInstallUpdateAndProtectedRemoval(t *testing.T) {
 	root, _ := fixture(t)
 	state, plugins := t.TempDir(), t.TempDir()

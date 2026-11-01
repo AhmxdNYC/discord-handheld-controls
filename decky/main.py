@@ -180,6 +180,8 @@ class Installer:
         old_record = self.record.read_bytes() if self.record.exists() else None
         deployed = False
         try:
+            # Vesktop's isValidVencordInstall() needs package.json; without it Vesktop replaces the folder with upstream Vencord.
+            payload.setdefault("package.json", b"{}")
             for name, content in payload.items():
                 (stage / name).write_bytes(content)
             if backup.exists():

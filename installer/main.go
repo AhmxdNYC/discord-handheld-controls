@@ -130,6 +130,12 @@ func deployVencord(root, state string) (string, error) {
 	if err := copyTree(filepath.Join(root, "payload", "vencord", "dist"), stage); err != nil {
 		return "", err
 	}
+	// Vesktop's isValidVencordInstall() needs package.json; without it Vesktop overwrites the folder with upstream Vencord. Older zips lack it.
+	if _, err := os.Stat(filepath.Join(stage, "package.json")); os.IsNotExist(err) {
+		if err := os.WriteFile(filepath.Join(stage, "package.json"), []byte("{}"), 0644); err != nil {
+			return "", err
+		}
+	}
 	backup := filepath.Join(state, "backups", "vencord-"+time.Now().Format("20060102-150405.000000000"))
 	if _, err := os.Stat(dist); err == nil {
 		if err := os.MkdirAll(filepath.Dir(backup), 0755); err != nil {

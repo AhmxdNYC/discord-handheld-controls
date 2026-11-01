@@ -104,6 +104,12 @@ class InstallTests(unittest.TestCase):
         self.assertEqual(backend.read_json(self.state)["vencordDir"], "/original/dist")
         self.assertFalse(self.installer.launcher.exists())
 
+    def test_install_writes_package_json_for_vesktop(self):
+        self.installer.install()
+        self.assertEqual((self.config / "handheld-controls-decky/dist/package.json").read_text(), "{}")
+        self.installer.install()  # update keeps it, and remove still accepts the payload
+        self.installer.remove()
+
     def test_update_keeps_original_restore_path_and_shortcut(self):
         self.installer.install()
         self.installer.save_shortcut(12345)

@@ -50,6 +50,8 @@ def package(name, go, vencord):
     for path in (vencord / "dist").iterdir():
         if path.is_file() and path.suffix in [".js", ".css", ".txt"]:
             shutil.copy2(path, payload / "vencord" / "dist" / path.name)
+    # Vesktop's isValidVencordInstall() requires package.json in the Vencord Location folder.
+    (payload / "vencord" / "dist" / "package.json").write_text("{}")
     shutil.copytree(ROOT / "dist" / "betterdiscord", payload / "betterdiscord")
     cache = ROOT / ".build" / "installers" / "v1.4.2" / asset
     download(f"https://github.com/Vencord/Installer/releases/download/v1.4.2/{asset}", cache, checksum)
