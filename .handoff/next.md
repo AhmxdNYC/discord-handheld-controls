@@ -10,3 +10,4 @@
 - 2026-11-01 4:00 pm EST pc/0: item 2 DONE (#61694, 10/10 PASS). Item 15 fix (package.json) with cx-ally; 3 small UX bugs into item 4; real-pad check in needs-player.md. Next: cx-ally fix RESULT -> pc verifies tests; then item 3 Decky on Ally (pin already 6.34, 6a030a8).
 - 2026-11-01 4:10 pm EST pc/0: verified fix 1b645ed (go test OK, package.json in all 4 paths) + cx-pc UX fixes b9324f8 (npm 37/37). Next: ally re-runs scripts/vpad.py smoke on b9324f8 build (keyboard first press, LB last channel, guide at 200%); then item 3 Decky on Ally; then ask human for 6.35.0 release OK.
 - 2026-11-01 ~4:30 pm EST ally/0: smoke.sh failed (nav route), pretest fixed 97e4847; next = consolidate harness on hh_harness.py, then Decky item 3. See checkpoints.md.
+- 2026-11-01 4:08 pm EST pc/0: harness decision: keep hh_harness.py, drop smoke.sh (#61720). Vesktop lease on Ally: ally/1 finishes keyboard step first, then ally/0 runs #61727 with it.
