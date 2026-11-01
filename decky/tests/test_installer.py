@@ -8,6 +8,7 @@ import stat
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from unittest.mock import patch
 import zipfile
 
@@ -31,6 +32,30 @@ def bundle(extra=None, manifest_edit=None):
             archive.writestr(*extra)
     data = stream.getvalue()
     return data, hashlib.sha256(data).hexdigest()
+
+
+class SslContextTests(unittest.TestCase):
+    def test_loads_first_existing_bundle_when_store_is_empty(self):
+        context = unittest.mock.MagicMock()
+        context.cert_store_stats.return_value = {"x509_ca": 0}
+        with tempfile.TemporaryDirectory() as d:
+            good = Path(d) / "ca.crt"; good.write_text("x")
+            with patch.object(backend.ssl, "create_default_context", return_value=context):
+                result = backend._ssl_context([str(Path(d) / "missing.crt"), str(good), str(Path(d) / "later.crt")])
+        self.assertIs(result, context)
+        context.load_verify_locations.assert_called_once_with(cafile=str(good))
+
+    def test_keeps_default_store_when_it_has_cas(self):
+        context = unittest.mock.MagicMock()
+        context.cert_store_stats.return_value = {"x509_ca": 5}
+        with patch.object(backend.ssl, "create_default_context", return_value=context):
+            backend._ssl_context(["/etc/ssl/certs/ca-certificates.crt"])
+        context.load_verify_locations.assert_not_called()
+
+    def test_verification_is_never_disabled(self):
+        context = backend._ssl_context([])
+        self.assertEqual(context.verify_mode, backend.ssl.CERT_REQUIRED)
+        self.assertTrue(context.check_hostname)
 
 
 class VerificationTests(unittest.TestCase):

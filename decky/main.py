@@ -9,6 +9,7 @@ from pathlib import Path, PurePosixPath
 import platform
 import shlex
 import shutil
+import ssl
 import stat
 import subprocess
 import tempfile
@@ -84,6 +85,26 @@ def verified_payload(data, expected=ARCHIVE_SHA256):
         return payload
 
 
+CA_BUNDLES = ["/etc/ssl/certs/ca-certificates.crt", "/etc/pki/tls/certs/ca-bundle.crt", "/etc/ssl/cert.pem", "/etc/ssl/ca-bundle.pem"]
+
+
+def _ssl_context(bundles=None):
+    """Decky's frozen Python has no default CA path: fall back to the system bundle (or certifi). Verification stays on."""
+    context = ssl.create_default_context()
+    if context.cert_store_stats()["x509_ca"] == 0:
+        candidates = list(CA_BUNDLES if bundles is None else bundles)
+        try:
+            import certifi
+            candidates.append(certifi.where())
+        except ImportError:
+            pass
+        for path in candidates:
+            if os.path.isfile(path):
+                context.load_verify_locations(cafile=path)
+                break
+    return context
+
+
 class Installer:
     def __init__(self, home, run=subprocess.run):
         self.home = Path(home).resolve()
@@ -146,7 +167,7 @@ class Installer:
 
     def download(self):
         request = urllib.request.Request(ARCHIVE_URL, headers={"User-Agent": "HandheldControls-Decky"})
-        with urllib.request.urlopen(request, timeout=120) as response:
+        with urllib.request.urlopen(request, timeout=120, context=_ssl_context()) as response:
             data = response.read(MAX_DOWNLOAD + 1)
         if len(data) > MAX_DOWNLOAD:
             raise ValueError("Release download exceeds size limit")
