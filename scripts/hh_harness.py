@@ -2,7 +2,7 @@
 """Hands-free test harness for HandheldControls in Vesktop (Bazzite Game Mode).
 
   hh_harness.py pretest [--no-fix]   check the setup before any test (and clear Steam's input grab)
-  hh_harness.py smoke [--shots DIR]  short scripted-pad run: nav down/up, open keyboard, type "hi", clear, close
+  hh_harness.py smoke [--shots DIR] [--channel /channels/G/C]  short scripted-pad run: nav down/up, open keyboard, type "hi", clear, close
   hh_harness.py pad "DOWN UP A:300"  press buttons on the scripted pad (NAME[:ms], default 120 ms)
 
 The scripted pad goes through the same hook the pad bridge uses (window.__hhExtPadSet over Vesktop's debug port 9222,
@@ -98,7 +98,9 @@ STATE_JS = """(() => { const f = document.querySelector('[data-hh-focus]'); cons
     extSet: typeof window.__hhExtPadSet, testPad: !!window.__hhPad, hasFocus: document.hasFocus(),
     kb: !!document.querySelector('.hh-kb:not(.hh-kb-out)'), calib: !!document.querySelector('.hh-calib-title'),
     split: !!document.querySelector('.hh-kb .hh-split'),
-    focus: f ? (f.getAttribute('aria-label') || f.textContent || f.tagName).trim().slice(0, 60) : null,
+    focus: f ? (f.getAttribute('aria-label') || f.textContent || f.tagName).trim().slice(0, 60)
+      : (fr => fr ? 'area@' + [fr.left, fr.top, fr.width, fr.height].map(Math.round).join(',') : null)(document.querySelector('.hh-frame')?.getBoundingClientRect()),
+    path: location.pathname,
     box: box ? box.innerText.replace(/\\uFEFF/g, '').trim() : null, title: document.title.slice(0, 80) }; })()"""
 
 
@@ -164,7 +166,7 @@ async def type_char(page, pad, ch):
     return sel, f"key {ch!r} aimed ({sx:+.2f},{sy:+.2f}) {'selected' if sel else 'NOT selected'}"
 
 
-async def smoke(shots):
+async def smoke(shots, channel=None):
     os.makedirs(shots, exist_ok=True)
     results = []
     def step(name, ok, note=""): results.append((name, ok, note)); print(f"{'PASS' if ok else 'FAIL'}  {name}  {note}")
@@ -175,13 +177,31 @@ async def smoke(shots):
     step("nav down", s1["focus"] is not None and s1["focus"] != s0["focus"], f"{s0['focus']!r} -> {s1['focus']!r}")
     await pad.press("UP"); s2 = await page.ev(STATE_JS)
     step("nav up", s2["focus"] is not None and s2["focus"] != s1["focus"], f"-> {s2['focus']!r}")
-    # open the keyboard: put the caret in the channel's message box, then A (how the plugin opens it over a text box)
-    has_box = await page.ev("(() => { const b = document.querySelector('[role=\"textbox\"][data-slate-editor]'); if (!b) return false; b.focus(); return true; })()")
+    if not (await page.ev(STATE_JS))["box"] and (await page.ev("!document.querySelector('[role=\"textbox\"][data-slate-editor]')")):
+        # no message box here: go to a chat (--channel PATH, else the first DM in the list). Draft only, never sent.
+        js = f"Vencord.Webpack.Common.NavigationRouter.transitionTo({json.dumps(channel)})" if channel else \
+            "(() => { const a = document.querySelector('a[href^=\"/channels/@me/\"]'); a && a.click(); return !!a; })()"
+        await page.ev(js); await asyncio.sleep(2.0)
+    # open the keyboard the way a player does: Y (areas), D-pad to the message box's area, A (go in), A (type)
+    has_box = await page.ev("!!document.querySelector('[role=\"textbox\"][data-slate-editor]')")
     before = (await page.ev(STATE_JS))["box"] or ""
+    if has_box:
+        in_box = """(() => { const b = document.querySelector('[role="textbox"][data-slate-editor]').getBoundingClientRect();
+          const f = document.querySelector('[data-hh-focus]'); if (f && f.matches('[role="textbox"], [role="textbox"] *')) return 'item';
+          const r = document.querySelector('.hh-frame')?.getBoundingClientRect(); const cx = b.left + b.width / 2, cy = b.top + b.height / 2;
+          return r && cx >= r.left && cx <= r.right && cy >= r.top && cy <= r.bottom ? 'area' : ''; })()"""
+        await pad.press("Y", 250, 0.4)
+        for btn in ["DOWN"] * 4 + ["RIGHT"] * 2 + ["DOWN"] * 3:
+            if await page.ev(in_box): break
+            await pad.press(btn, 120, 0.3)
+        where = await page.ev(in_box)
+        if where == "area": await pad.press("A", 120, 0.4); where = await page.ev(in_box)
+        step("pad to message box", where == "item", f"focus={(await page.ev(STATE_JS))['focus']!r}")
     if not has_box:
         step("open keyboard", False, "no message box in this view (open a channel first)")
     else:
-        await pad.press("A", 250, 0.6); s3 = await page.ev(STATE_JS)
+        if not (await page.ev(STATE_JS))["kb"]: await pad.press("A", 120, 0.6)
+        s3 = await page.ev(STATE_JS)
         if s3["calib"]:
             await pad.press("B", 250, 0.6); s3 = await page.ev(STATE_JS)
             step("calibration prompt skipped", not s3["calib"])
@@ -217,7 +237,7 @@ def main(argv):
         shots = argv[argv.index("--shots") + 1] if "--shots" in argv else os.path.expanduser("~/hh-test-shots")
         ok, lines = asyncio.run(pretest()); print("\n".join(lines))
         if not ok: print("PRETEST FAIL - smoke not run"); return 1
-        res = asyncio.run(smoke(shots))
+        res = asyncio.run(smoke(shots, argv[argv.index("--channel") + 1] if "--channel" in argv else None))
         good = all(r[1] for r in res); print(f"SMOKE {'PASS' if good else 'FAIL'} ({sum(r[1] for r in res)}/{len(res)}) shots in {shots}")
         return 0 if good else 1
     if cmd == "pad":
