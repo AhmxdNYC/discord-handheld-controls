@@ -3,3 +3,4 @@
 - 2026-11-01 15:53 | ally/1: decky py tests 20/20 on Ally at 42ddb84 | finding: first hh-v634 Vesktop install lacked vencordDesktop*.js -> Vesktop loaded stock Vencord, plugin absent; reinstalled 15:52 by other ally seat | next: item 2 (other ally seat); check installer Vesktop path writes vencordDesktop* files |
 - 2026-11-01 15:53 | correction: v6.34 Linux zip is fine (sha 0b97eb47, has vencordDesktop*); the 15:50 broken hh-v634 was a partial manual copy, not an installer bug. Plugin now loaded in Vesktop. |
 - 2026-11-01 15:53 | pad answers folded (open item 14); harness TASK #61669 to ally | unproven: harness not built yet | next: ally RESULT on #61669 | commits 88a0845+
+- 2026-11-01 15:54 | bug logged: Vencord autoUpdate replaces custom build (open 15); installer has no update handling | unproven: fix key/behaviour | next: ally answer #61688 -> cx-pc installer fix | bdb3920
