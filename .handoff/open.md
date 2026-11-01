@@ -15,3 +15,4 @@
 - [ ] 10. Record test runs as video on the Ally (gamescope screenshots/pipewire; X11 root capture is black) - timing/feel bugs need video, not stills. | ally
 - [ ] 11. Readability pass on the 7-inch screen: grey out actions that do nothing in the current view; check hint/keycap text size on the real Ally. | ally
 - [ ] 12. Keep test/harness scripts in the repo (Ally /tmp is wiped on reboot). | ally
+- [ ] 13. From Nioh answer #61642: after closing keyboard/menu/calibration, treat the pad as neutral until every button is released (no carry-over press into Discord); check the plugin does this everywhere, not only for A on keyboard open. | ally
