@@ -1,0 +1,1 @@
+- 2026-11-01 15:55 | baseline tests on pc: main 37/37, decky tsc ok, decky py tests Windows-only path failures | proven: main suite green on Windows | next: Ally Vesktop hands-on (open.md 2) |
