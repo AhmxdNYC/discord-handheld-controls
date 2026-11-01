@@ -2,3 +2,4 @@
 - 2026-11-01 | Decky pin bump | Decky installer still downloaded old v6.30.0 | pinned to v6.34.0 Linux zip, hash verified against the release; Decky tests 21 OK on pc
 - 2026-11-01 | Ally Vesktop test v6.34.0 | v6.34.0 had never been tried with a controller on the Ally | ally drove it with a scripted pad: 10/10 checks pass (nav, keyboard, menus, server/channel switch, mouse switch); found the missing-package.json bug that makes Vesktop drop the plugin
 - 2026-11-01 | Plugin vanishing on Vesktop (item 15) | Vesktop replaced our build with stock Vencord on start because a package.json file was missing | cx-ally added it to every install path (1b645ed); Ally: plugin survived 3 launches; pc: Go installer tests + 37/37 JS tests pass
+- 2026-11-01 | Handheld UX trio fixed | keyboard opened on box buttons, LB back to a server landed on #rules, controls guide cut off at 200% scale | fixes b9324f8/f30f064/26cd444, all 3 PASS on Ally Vesktop (#62108), npm 37/37

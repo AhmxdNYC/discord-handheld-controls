@@ -1,4 +1,4 @@
-# Open work
+﻿# Open work
 
 - [x] First step: read goal.md and rules.md, write a short plan in next.md (pc/0, 2026-11-01).
 - [x] 1. Baseline: run `npm test` + `cd decky && npm test && npm run check` on pc (Codex helper cx-pc); record pass/fail. | pc -> DONE 11-01 pc/0: main npm test 37/37 (needs npm ci + npm run build:betterdiscord first, else 7 fail); decky tsc OK; decky python tests 10 err + 1 fail on Windows only (8.3 temp path vs home, relative_to) - run them on Linux/Ally.
