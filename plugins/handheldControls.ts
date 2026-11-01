@@ -2086,7 +2086,7 @@ function switchServer(step: 1 | -1) {
     if (next < 0 || next >= ids.length) return toast(step > 0 ? "Last server" : "First server", 700);
     // land on the channel last viewed there (the bare guild route opens its first channel, e.g. #rules)
     let last: string | undefined;
-    try { last = (SelectedChannelStore as any).getLastSelectedChannelId?.(ids[next]); } catch { }
+    try { last = (SelectedChannelStore as any).getMostRecentSelectedTextChannelId?.(ids[next]) ?? (SelectedChannelStore as any).getLastSelectedChannelId?.(ids[next]); } catch { }
     if (last && ChannelStore.getChannel(last)) (NavigationRouter as any).transitionToGuild(ids[next], last);
     else NavigationRouter.transitionToGuild(ids[next]);
 }
