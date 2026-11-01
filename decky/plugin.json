@@ -1,0 +1,11 @@
+{
+  "name": "Discord Handheld Controls",
+  "author": "AhmxdNYC",
+  "flags": [],
+  "api_version": 1,
+  "publish": {
+    "tags": ["discord", "controller", "vesktop"],
+    "description": "Install controller support for Vesktop and add it to your Steam library.",
+    "image": "https://opengraph.githubassets.com/1/AhmxdNYC/discord-handheld-controls"
+  }
+}
