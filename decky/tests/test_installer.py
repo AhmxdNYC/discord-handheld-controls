@@ -5,6 +5,7 @@ import io
 import json
 from pathlib import Path
 import stat
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -74,7 +75,7 @@ class VerificationTests(unittest.TestCase):
 class InstallTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
-        self.home = Path(self.temp.name)
+        self.home = Path(self.temp.name).resolve()  # long path on Windows (8.3 temp names break relative_to)
         self.installer = backend.Installer(self.home)
         self.config = self.home / ".config/vesktop"
         self.config.mkdir(parents=True)
@@ -93,6 +94,7 @@ class InstallTests(unittest.TestCase):
             mock.stop()
         self.temp.cleanup()
 
+    @unittest.skipIf(sys.platform == "win32", "Windows has no executable mode bit")
     def test_install_preserves_settings_and_remove_restores_location(self):
         result = self.installer.install()
         self.assertTrue(result["installed"])
@@ -194,6 +196,7 @@ class InstallTests(unittest.TestCase):
             config, kind = backend.Installer.config(self.installer)
         self.assertEqual((config, kind), (self.config, "native"))
 
+    @unittest.skipIf(sys.platform == "win32", "pgrep/getuid are Linux-only")
     def test_process_check_rejects_running_vesktop(self):
         # Call the real method, bypassing this fixture's no-live-process mock.
         def fake_run(args, **kwargs):
