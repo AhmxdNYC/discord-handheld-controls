@@ -1,1 +1,2 @@
 - [ ] Real controller check of Discord v6.34 on the Ally | Open Vesktop from Steam (Game Mode), press a few buttons: move with D-pad, A into the chat, type a word with the on-screen keyboard (DOWN first to reach keys), press the back paddles once; say if anything feels wrong | ally
+- [ ] Handheld Controls: real-pad check on the Ally | Open Vesktop (Discord shortcut) in Game Mode, press real buttons: move around, open keyboard and type, use the back paddles, do calibration step 3; say what doesn't react | ally

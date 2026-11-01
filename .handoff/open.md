@@ -2,9 +2,9 @@
 
 - [x] First step: read goal.md and rules.md, write a short plan in next.md (pc/0, 2026-11-01).
 - [x] 1. Baseline: run `npm test` + `cd decky && npm test && npm run check` on pc (Codex helper cx-pc); record pass/fail. | pc -> DONE 11-01 pc/0: main npm test 37/37 (needs npm ci + npm run build:betterdiscord first, else 7 fail); decky tsc OK; decky python tests 10 err + 1 fail on Windows only (8.3 temp path vs home, relative_to) - run them on Linux/Ally.
-- [x] 2. Ally hands-on test of v6.34.0 in Vesktop on Bazzite (Game Mode + desktop): section nav, lock/scroll, context menus, server/channel switch, on-screen + split keyboard typing, mention/slash autocomplete, mouse<->controller auto switch, back button. Screenshots + pass/fail per item. | ally
+- [x] 2. Ally hands-on test of v6.34.0 in Vesktop on Bazzite (Game Mode + desktop): section nav, lock/scroll, context menus, server/channel switch, on-screen + split keyboard typing, mention/slash autocomplete, mouse<->controller auto switch, back button. Screenshots + pass/fail per item. | ally -> DONE 11-01 ally/0 #61694: 10/10 scripted checks PASS (report .handoff/results/2026-11-01-ally-item2-vesktop.md); physical pad/back paddles/calibration step 3 -> needs-player.md
 - [ ] 3. Decky preview on Ally: build zip, install via Decky dev ZIP, run Install/Update + Steam shortcut; check it loads and launches Vesktop. Note: Decky pin bumped to v6.34.0 (pc/0 11-01, tests 21 OK). Decky zip itself still only exists on v6.30.0 release - new one ships with 6.35.0. | ally
-- [ ] 4. Fix bugs from 2-3 (Codex/Grok helpers write code, Claude verifies on Ally). | cx-pc / ally
+- [ ] 4. Fix bugs from 2-3 (from #61694: keyboard opens in box-buttons mode so first LT/RT types nothing; LB back to a server lands on #rules not last-viewed channel; controls guide bottom row cut off at 200% scale) (Codex/Grok helpers write code, Claude verifies on Ally). | cx-pc / ally
 - [ ] 5. Windows check (optional): official Discord + Vencord and BetterDiscord with a pad on pc. | pc
 - [ ] 6. Release 6.35.0 (installers + Decky zip) - ONLY after the human says OK. | pc
 

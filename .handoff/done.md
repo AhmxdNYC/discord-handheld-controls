@@ -1,2 +1,3 @@
 - 2026-11-01 | Decky tests on Ally | check the Decky plugin's Python tests on real Linux (they failed on Windows only) | ally/1 ran them at 42ddb84: 20/20 pass in 0.04 s
 - 2026-11-01 | Decky pin bump | Decky installer still downloaded old v6.30.0 | pinned to v6.34.0 Linux zip, hash verified against the release; Decky tests 21 OK on pc
+- 2026-11-01 | Ally Vesktop test v6.34.0 | v6.34.0 had never been tried with a controller on the Ally | ally drove it with a scripted pad: 10/10 checks pass (nav, keyboard, menus, server/channel switch, mouse switch); found the missing-package.json bug that makes Vesktop drop the plugin
