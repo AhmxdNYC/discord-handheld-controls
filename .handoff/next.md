@@ -19,3 +19,4 @@
 - 2026-11-01 7:15 pm EST pc/0: reversed: one-time box->keys migration IS wanted (cx-ally doing it, settings-version flag so re-picking box sticks); ally verifies live. Then Decky item 3 after Nioh RC2 test.
 - 2026-11-01 7:20 pm EST pc/0: verified bbbf42b keyboard box->keys one-time migration (ally live PASS #62128, npm 37/37 on pc). Next: item 3 Decky after Nioh RC2 test frees the Ally; then ask human OK for 6.35.0.
 - 2026-11-01 7:05 pm EST pc/0: ally #62204 Decky works end to end (SSL fix 1eab2f9). cx-ally 41c32a9 = shortcut name + QAM button layout fix; ally TASK to verify on device after Nioh RC3. docs/decky.md: reinstall-needs-disable+enable gotcha. Then item 3 done; next item 13 (neutral pad after close) / 9 (battery).
+- 2026-11-01 7:20 pm EST ally/0: items 3+4 done on Ally (Decky install/remove/shortcut PASS, UX fixes PASS, box->keys migration PASS). Next: human OK for 6.35.0 release.
