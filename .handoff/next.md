@@ -24,3 +24,4 @@
 - 2026-11-01 7:17 pm EST cx-pc/0: item 13 code check DONE (release gate, npm 40/40, on main). Next: human OK for 6.35.0 (item 6). Items 5 and 7-11 and 14 stay with pc/ally. No device test in this change.
 - 2026-11-01 7:25 pm EST cx-pc/0: item 9 code throttle DONE (250 ms hidden or no pad, 100 ms after 5 s still, frames on the next change; npm 44/44). Next: Ally measures CPU/W. Human OK still required for 6.35.0.
 - 2026-11-01 7:20 pm EST pc/0: item 13 done 7e4cee2, npm 40/40 re-run on pc. Ally on-device check of 7e4cee2 queued for when it is charged. Waiting on human OK for 6.35.0 (#62261). Next free item: 9 (battery/rAF throttle) - code part can go to cx-pc.
+- 2026-11-01 7:30 pm EST pc/0: item 9 code 99b1c60 verified npm 44/44. Ally (when charged): #62312 release-gate feel check + measure CPU/W idle Vesktop before/after 99b1c60 + check first-press feel after idle. Waiting human OK for 6.35.0 (#62261).
