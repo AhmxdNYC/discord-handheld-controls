@@ -31,7 +31,7 @@ The installable development ZIP is written to `dist/decky/HandheldControls-Decky
 
 This initial integration launches Vesktop with its normal native Gamepad input. It does not install the optional evdev controller bridge or alter Steam Input/controller layouts. Game Mode controller exposure, first sign-in, launch behavior, focus handling, multiple controllers, Steam shortcut removal, and frontend notifications still require runtime testing. No always-on background service is installed.
 
-When testing a new ZIP: reinstalling a plugin with the same name does not reload its Python backend. Disable and re-enable the plugin (or restart Decky) after each reinstall, or the old backend keeps running.
+When testing a new ZIP: reinstalling a plugin with the same name does not reload its Python backend. Disable and re-enable the plugin (or restart Decky) after each reinstall, or the old backend keeps running. The old Quick Access panel UI also stays until Steam's UI restarts.
 
 For a public Decky release, validate the ZIP in a clean user environment and on Steam Deck/Bazzite before store submission. The official plugin database uses a repository submodule; because this plugin lives in a subdirectory of a larger repository, confirm accepted packaging/build metadata with Decky maintainers before submission rather than assuming store acceptance.
 
