@@ -9,7 +9,7 @@ const status = callable<[], Status>("status");
 const perform = callable<[action: string], Status>("perform");
 const saveShortcut = callable<[appId: number], Status>("save_shortcut");
 // Steam's client API is available inside Decky's Steam frontend.
-declare const SteamClient: { Apps: { AddShortcut(name: string, executable: string, directory: string, options: string): Promise<number>; RemoveShortcut(appId: number): void } };
+declare const SteamClient: { Apps: { AddShortcut(name: string, executable: string, directory: string, options: string): Promise<number>; RemoveShortcut(appId: number): void; SetShortcutName(appId: number, name: string): void } };
 
 function Content() {
   const [info, setInfo] = useState<Status>();
@@ -37,7 +37,10 @@ function Content() {
         setMessage("A Steam shortcut is already recorded. Remove it through Steam before creating another.");
         return;
       }
-      const id = await SteamClient.Apps.AddShortcut("Discord — Handheld Controls", `"${info.launcher}"`, `"${info.directory}"`, "");
+      const name = "Discord — Handheld Controls";
+      const id = await SteamClient.Apps.AddShortcut(name, `"${info.launcher}"`, `"${info.directory}"`, "");
+      // current Steam clients ignore AddShortcut's name and derive it from the executable (stray quote included)
+      SteamClient.Apps.SetShortcutName?.(id, name);
       try { setInfo(await saveShortcut(id)); }
       catch (error) { SteamClient.Apps.RemoveShortcut(id); throw error; }
       setMessage("Discord — Handheld Controls is in your Steam library.");
@@ -49,12 +52,12 @@ function Content() {
     <PanelSectionRow><div>{info ? `Vesktop: ${info.vesktop}. Controls: ${info.version ?? "not installed"}. Available: ${info.available}.` : message}</div></PanelSectionRow>
     <PanelSectionRow><div>{info?.message}</div></PanelSectionRow>
     {info?.customBuild && <PanelSectionRow><div>Installing replaces your custom Vencord build. Remove restores its original location. Other custom plugins in that build may be unavailable while this build is selected.</div></PanelSectionRow>}
-    {info?.vesktop === "missing" && <PanelSectionRow><ButtonItem disabled={busy} onClick={() => run("install_vesktop")}>Install Vesktop</ButtonItem></PanelSectionRow>}
-    <PanelSectionRow><ButtonItem disabled={busy || !info || info.vesktop === "missing"} onClick={() => run(info?.installed ? "update" : "install")}>{info?.installed ? "Update controls" : "Install controls"}</ButtonItem></PanelSectionRow>
+    {info?.vesktop === "missing" && <PanelSectionRow><ButtonItem layout="below" disabled={busy} onClick={() => run("install_vesktop")}>Install Vesktop</ButtonItem></PanelSectionRow>}
+    <PanelSectionRow><ButtonItem layout="below" disabled={busy || !info || info.vesktop === "missing"} onClick={() => run(info?.installed ? "update" : "install")}>{info?.installed ? "Update controls" : "Install controls"}</ButtonItem></PanelSectionRow>
     {info?.installed && <>
-      <PanelSectionRow><ButtonItem disabled={busy} onClick={() => run("repair")}>Repair controls</ButtonItem></PanelSectionRow>
-      <PanelSectionRow><ButtonItem disabled={busy || !!info.shortcutId} onClick={addShortcut}>{info.shortcutId ? "Added to Steam" : "Add to Steam library"}</ButtonItem></PanelSectionRow>
-      <PanelSectionRow><ButtonItem disabled={busy} onClick={() => run("remove")}>Remove controls and shortcut</ButtonItem></PanelSectionRow>
+      <PanelSectionRow><ButtonItem layout="below" disabled={busy} onClick={() => run("repair")}>Repair controls</ButtonItem></PanelSectionRow>
+      <PanelSectionRow><ButtonItem layout="below" disabled={busy || !!info.shortcutId} onClick={addShortcut}>{info.shortcutId ? "Added to Steam" : "Add to Steam library"}</ButtonItem></PanelSectionRow>
+      <PanelSectionRow><ButtonItem layout="below" disabled={busy} onClick={() => run("remove")}>Remove controls and shortcut</ButtonItem></PanelSectionRow>
     </>}
     <PanelSectionRow><div>{message}</div></PanelSectionRow>
   </PanelSection>;
