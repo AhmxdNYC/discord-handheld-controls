@@ -369,6 +369,10 @@ const LANDMARK = 'form, nav, aside, section, header, main, [role="tablist"], [ro
 
 // ---------- state ----------
 let raf = 0;
+let pollTimer = 0;
+let loopOn = false;
+let lastPadSignature = "";
+let lastPadChangeAt = 0;
 let frame = 0;
 let prevPressed: boolean[] = [];
 let navigationButtonsBlocked = false;
@@ -2735,8 +2739,8 @@ function showPadCard(pad: Gamepad, connected: boolean) {
     const el = padCardEl;
     padCardTimer = window.setTimeout(() => { el.classList.add("hh-padcard-out"); setTimeout(() => el.remove(), 250); }, 3200);
 }
-const onPadConnected = (e: GamepadEvent) => showPadCard(e.gamepad, true);
-const onPadDisconnected = (e: GamepadEvent) => showPadCard(e.gamepad, false);
+const onPadConnected = (e: GamepadEvent) => { showPadCard(e.gamepad, true); wakeLoop(); };
+const onPadDisconnected = (e: GamepadEvent) => { showPadCard(e.gamepad, false); wakeLoop(); };
 
 /** "Message sent" card (same style as the controller card), with the start of the message. */
 let sentCardEl: HTMLDivElement | null = null, sentCardTimer = 0;
@@ -3432,11 +3436,80 @@ function stickDir(pad: Gamepad): Dir | null {
 }
 
 let errorCount = 0;
+
+// poll-schedule: rAF while the pad is changing. After 5 s with no change, poll every 100 ms.
+// A hidden window or no connected pad polls every 250 ms. The tick that sees a change handles it
+// before the next wait, so the first press costs at most one poll.
+const POLL_HIDDEN_MS = 250;
+const POLL_QUIET_MS = 100;
+const QUIET_AFTER_MS = 5000;
+function nextPollDelay(hidden: boolean, padConnected: boolean, quietForMs: number): number | null {
+    if (hidden || !padConnected) return POLL_HIDDEN_MS;
+    if (quietForMs >= QUIET_AFTER_MS) return POLL_QUIET_MS;
+    return null;
+}
+function anyPadConnected(): boolean {
+    if (extPad && performance.now() - extAliveAt < 3000 && !(window as any).__hhPad) return true;
+    const pads = navigator.getGamepads?.() ?? [];
+    for (let i = 0; i < pads.length; i++) if (pads[i]) return true;
+    return false;
+}
+function padSnapshot(pad: Gamepad): string {
+    const dz = settings.store.stickDeadzone;
+    let buttons = "";
+    for (const b of pad.buttons) buttons += b.pressed || b.value > 0.5 ? "1" : "0";
+    let axes = "";
+    for (let i = 0; i < 4; i++) {
+        const a = pad.axes[i] ?? 0;
+        axes += Math.abs(a) > dz ? (a > 0 ? "+" : "-") : "0";
+    }
+    return buttons + axes;
+}
+function notePadActivity(): boolean {
+    let sig = "";
+    const pad = getPad();
+    if (pad) sig = padSnapshot(pad);
+    if (sig === lastPadSignature) return false;
+    lastPadSignature = sig;
+    lastPadChangeAt = performance.now();
+    return true;
+}
+function clearLoopTimers() {
+    if (raf) { cancelAnimationFrame(raf); raf = 0; }
+    if (pollTimer) { clearTimeout(pollTimer); pollTimer = 0; }
+}
+function armNextTick() {
+    if (!loopOn) return;
+    const delay = nextPollDelay(!!document.hidden, anyPadConnected(), performance.now() - lastPadChangeAt);
+    if (delay == null) {
+        if (pollTimer) { clearTimeout(pollTimer); pollTimer = 0; }
+        if (!raf) raf = requestAnimationFrame(tick);
+        return;
+    }
+    if (raf) { cancelAnimationFrame(raf); raf = 0; }
+    if (!pollTimer) pollTimer = window.setTimeout(tick, delay);
+}
+function wakeLoop() {
+    if (!loopOn) return;
+    lastPadChangeAt = performance.now();
+    clearLoopTimers();
+    if (document.hidden || !anyPadConnected()) pollTimer = window.setTimeout(tick, 0);
+    else raf = requestAnimationFrame(tick);
+}
+function onVisibility() {
+    if (!loopOn) return;
+    clearLoopTimers();
+    armNextTick();
+}
+// end poll-schedule
+
 function tick() {
-    raf = requestAnimationFrame(tick);
+    raf = 0;
+    pollTimer = 0;
     frame++;
     try {
         tickInner();
+        notePadActivity();
         if (frame % 30 === 0) updateControllerStatus();
         if (controllerActive && kbEl && frame % 6 === 0) updateSuggestions();
         const idle = performance.now() - lastPadUse > 15000 && !kbEl && !panelEl && !calibEl && !helpEl;
@@ -3447,6 +3520,8 @@ function tick() {
         // (never stops for good — that left the controller dead until a reload: report it once, then keep trying)
         if (++errorCount <= 3 || errorCount % 300 === 0) console.error("[HandheldControls]", e);
         if (errorCount === 30) toast("🎮 Controller hiccup — still running (if something's stuck, press B)", 2500);
+    } finally {
+        armNextTick();
     }
 }
 
@@ -6661,6 +6736,7 @@ export default definePlugin({
         });
         suggestionObserver.observe(document.body, {childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["aria-controls", "aria-owns", "aria-selected"]});
         document.addEventListener("click", onMenuClickCapture, true);
+        document.addEventListener("visibilitychange", onVisibility);
         prevPressed = []; extTransitions = []; sampledExtPad = extPad;
         if ((settings.store.prefsVersion ?? 0) < 2) {
             settings.store.drawerSide = "right";
@@ -6679,6 +6755,8 @@ export default definePlugin({
             (settings.store as any).keyboardHeight = 45;
             settings.store.prefsVersion = 5;
         }
+        loopOn = true;
+        lastPadChangeAt = performance.now();
         raf = requestAnimationFrame(tick);
         setTimeout(() => toast(`🎮 Handheld Controls ${VERSION} loaded`, 2500), 1500);
         // read-only peek at the navigation state, for live testing over the debug port
@@ -6696,7 +6774,9 @@ export default definePlugin({
     },
 
     stop() {
-        cancelAnimationFrame(raf);
+        loopOn = false;
+        clearLoopTimers();
+        document.removeEventListener("visibilitychange", onVisibility);
         suggestionObserver?.disconnect(); suggestionObserver = null; releaseAutocomplete();
         controllerStatusEl?.remove(); controllerStatusEl = null;
         menuObserver?.disconnect(); menuObserver = null;

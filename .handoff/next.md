@@ -22,4 +22,5 @@
 - 2026-11-01 7:20 pm EST ally/0: items 3+4 done on Ally (Decky install/remove/shortcut PASS, UX fixes PASS, box->keys migration PASS). Next: human OK for 6.35.0 release.
 - 2026-11-01 7:10 pm EST pc/0: item 3 DONE (ally #62259). Ally battery 3%. Next: human OK for 6.35.0 release (item 6, DECISION sent); meanwhile item 13 (neutral pad after close) as code check by cx-pc.
 - 2026-11-01 7:17 pm EST cx-pc/0: item 13 code check DONE (release gate, npm 40/40, on main). Next: human OK for 6.35.0 (item 6). Items 5 and 7-11 and 14 stay with pc/ally. No device test in this change.
+- 2026-11-01 7:25 pm EST cx-pc/0: item 9 code throttle DONE (250 ms hidden or no pad, 100 ms after 5 s still, frames on the next change; npm 44/44). Next: Ally measures CPU/W. Human OK still required for 6.35.0.
 - 2026-11-01 7:20 pm EST pc/0: item 13 done 7e4cee2, npm 40/40 re-run on pc. Ally on-device check of 7e4cee2 queued for when it is charged. Waiting on human OK for 6.35.0 (#62261). Next free item: 9 (battery/rAF throttle) - code part can go to cx-pc.
