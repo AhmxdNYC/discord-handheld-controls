@@ -5,3 +5,4 @@
 - ally/0: #61727 done (item 4 PASS); item 3 Decky install pending a free Ally (zip built).
 - pc/0: lead, verifies RESULTs.
 - NOTE: cx-pc (Codex) hit its usage limit until Nov 4 1:50 am EST (#61703) - send PC code work to gx-pc / cxl-pc instead.
+- 2026-11-01 7:32 pm EST: cx-pc/1 finished item 9 code (0a09f6d). Ally measures CPU/W when charged. This seat does not run Vesktop.
