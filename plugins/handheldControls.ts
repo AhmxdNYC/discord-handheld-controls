@@ -3404,6 +3404,7 @@ let extInputKey = "";
         vibrationActuator: null, hapticActuator: null,
     } as unknown as Gamepad;
     const key = extPad.buttons.map(b => b.pressed ? "1" : "0").join("") + ":" + stickDir(extPad);
+    const changed = key !== extInputKey;
     // A press and release can arrive in the same animation frame. Keep both, in order.
     if (!document.hasFocus() || (window as any).__hhNativeFileChooser || (window as any).__hhPad) {
         extTransitions = []; sampledExtPad = extPad;
@@ -3414,9 +3415,12 @@ let extInputKey = "";
         extTransitions[extTransitions.length - 1] = extPad;
     }
     extInputKey = key;
+    // pokePoll lives with the poll loop. Guarded so the input-transition tests can load this block alone.
+    if (changed && typeof pokePoll === "function") pokePoll();
 };
 (window as any).__hhExtPadDisconnect = () => {
     extPad = null; sampledExtPad = null; extTransitions = []; extInputKey = ""; extAliveAt = 0;
+    if (typeof pokePoll === "function") pokePoll();
 };
 function sampleControllerInput() {
     if ((window as any).__hhPad) { extTransitions = []; sampledExtPad = extPad; return; }
@@ -3451,7 +3455,10 @@ function nextPollDelay(hidden: boolean, padConnected: boolean, quietForMs: numbe
 function anyPadConnected(): boolean {
     if (extPad && performance.now() - extAliveAt < 3000 && !(window as any).__hhPad) return true;
     const pads = navigator.getGamepads?.() ?? [];
-    for (let i = 0; i < pads.length; i++) if (pads[i]) return true;
+    for (let i = 0; i < pads.length; i++) {
+        const p = pads[i];
+        if (p && p.connected !== false) return true;
+    }
     return false;
 }
 function padSnapshot(pad: Gamepad): string {
@@ -3487,14 +3494,21 @@ function armNextTick() {
         return;
     }
     if (raf) { cancelAnimationFrame(raf); raf = 0; }
-    if (!pollTimer) pollTimer = window.setTimeout(tick, delay);
+    if (!pollTimer) pollTimer = setTimeout(tick, delay);
 }
 function wakeLoop() {
     if (!loopOn) return;
     lastPadChangeAt = performance.now();
     clearLoopTimers();
-    if (document.hidden || !anyPadConnected()) pollTimer = window.setTimeout(tick, 0);
+    if (document.hidden || !anyPadConnected()) pollTimer = setTimeout(tick, 0);
     else raf = requestAnimationFrame(tick);
+}
+// A button can arrive while a 100 ms or 250 ms timer is still waiting. Run that poll now.
+// Leave a pending animation frame alone: cancelling it on every bridge event would starve the loop.
+function pokePoll() {
+    if (!loopOn || raf || !pollTimer) return;
+    clearTimeout(pollTimer);
+    pollTimer = setTimeout(tick, 0);
 }
 function onVisibility() {
     if (!loopOn) return;
@@ -6757,7 +6771,7 @@ export default definePlugin({
         }
         loopOn = true;
         lastPadChangeAt = performance.now();
-        raf = requestAnimationFrame(tick);
+        armNextTick();
         setTimeout(() => toast(`🎮 Handheld Controls ${VERSION} loaded`, 2500), 1500);
         // read-only peek at the navigation state, for live testing over the debug port
         (window as any).__hhState = () => ({

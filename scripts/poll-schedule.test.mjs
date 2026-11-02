@@ -39,17 +39,25 @@ function load() {
         let raf = 0, pollTimer = 0, loopOn = true, lastPadSignature = "", lastPadChangeAt = 0;
         let extPad = null, extAliveAt = 0;
         let pad = null;
+        let handledAt = null;
         function getPad() { return pad; }
-        function tick() { /* the plugin tick handles the sample, then arms the next wait */ }
+        function tick() {
+            raf = 0;
+            pollTimer = 0;
+            handledAt = performance.now();
+            notePadActivity();
+            armNextTick();
+        }
         ${asJs(slice)}
         return {
-            nextPollDelay, notePadActivity, armNextTick, wakeLoop, onVisibility, clearLoopTimers,
+            nextPollDelay, notePadActivity, armNextTick, wakeLoop, pokePoll, onVisibility, clearLoopTimers,
             setPad(p) { pad = p; },
             setExt(p, alive) { extPad = p; extAliveAt = alive; },
             setLoop(v) { loopOn = v; },
             rafId: () => raf,
             pollId: () => pollTimer,
             lastChange: () => lastPadChangeAt,
+            handledAt: () => handledAt,
         };
     `)(document, window, navigator, performance, settings, requestAnimationFrame, cancelAnimationFrame, setTimeout, clearTimeout);
     return { ...g, document, navigator, rafs, timers, setNow(t) { now = t; } };
@@ -135,4 +143,62 @@ test('the running tick handles the pad before it chooses the next wait, and stop
     stopped.wakeLoop();
     assert.equal(stopped.rafs.length, 0);
     assert.equal(stopped.timers.length, 0);
+});
+
+test('a live bridge pad stays on frames, and a stale one falls back to the 250 ms poll', () => {
+    const live = load();
+    live.setNow(5000);
+    live.setExt(pad(), 4000);
+    live.setPad(pad());
+    assert.equal(live.notePadActivity(), true);
+    live.armNextTick();
+    assert.ok(live.rafId() > 0);
+    assert.equal(live.timers.length, 0);
+
+    const stale = load();
+    stale.setNow(5000);
+    stale.setExt(pad(), 1000);
+    stale.armNextTick();
+    assert.equal(stale.rafId(), 0);
+    assert.equal(stale.timers.at(-1).delay, 250);
+});
+
+test('the first press after a quiet pad is handled on that same poll, within 100 ms', () => {
+    const g = load();
+    g.navigator.getGamepads = () => [pad()];
+    g.setPad(pad());
+    g.setNow(1000);
+    assert.equal(g.notePadActivity(), true);
+    g.setNow(6000);
+    g.clearLoopTimers();
+    g.armNextTick();
+    assert.equal(g.timers.at(-1).delay, 100);
+    const pressAt = 6050;
+    g.setPad(pad(0));
+    g.setNow(6100);
+    g.timers.at(-1).fn();
+    assert.equal(g.handledAt(), 6100);
+    assert.ok(6100 - pressAt <= 100);
+    assert.ok(g.rafId() > 0);
+});
+
+test('a pad change during the slow wait is pulled forward to an immediate poll', () => {
+    const g = load();
+    g.navigator.getGamepads = () => [pad()];
+    g.setPad(pad());
+    g.setNow(1000);
+    g.notePadActivity();
+    g.setNow(7000);
+    g.clearLoopTimers();
+    g.armNextTick();
+    assert.equal(g.timers.at(-1).delay, 100);
+    g.pokePoll();
+    assert.equal(g.rafId(), 0);
+    assert.equal(g.timers.at(-1).delay, 0);
+    g.setPad(pad(1));
+    g.setNow(7010);
+    g.timers.at(-1).fn();
+    assert.equal(g.handledAt(), 7010);
+    assert.ok(7010 - 7000 <= 100);
+    assert.ok(g.rafId() > 0);
 });
