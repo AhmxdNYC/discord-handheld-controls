@@ -1152,8 +1152,10 @@ function startTyping(el: Element) {
 }
 
 function stopTyping() {
+    const wasTyping = typingMode || !!kbEl;
     typingMode = false;
     closeKeyboard();
+    if (wasTyping) armReleaseGate();
     if (isTyping()) (document.activeElement as HTMLElement).blur();
 }
 
@@ -1615,6 +1617,7 @@ function closeSubmenu() {
     const other = [...parent.querySelectorAll(MENU_ITEM)].find(i => i !== opener && !hasSubmenu(i) && isVisible(i));
     if (!other) return false;
     hoverEl(other);
+    armReleaseGate();
     return true;
 }
 const inSubmenu = () => alive(menuOpener) && !openMenu()?.contains(menuOpener);
@@ -1740,6 +1743,7 @@ function pressKey(key: string, target: EventTarget) {
  *  sending a second one there could close two layers at once. */
 const escape = () => {
     menuChanged();
+    armReleaseGate();
     const pops = [...document.querySelectorAll('[role="dialog"], [aria-modal="true"]')].filter(isVisible);
     const active = document.activeElement && document.activeElement !== document.body ? document.activeElement : null;
     const top = pops[pops.length - 1];
@@ -2896,6 +2900,7 @@ function watchLayers() {
         if (!menu) {
             menuOpener = null;
             closeDrawer();
+            if (lastMenu) armReleaseGate();
             if (lastMenu && usingPad) restoreSoon();
         }
     }
@@ -3155,6 +3160,7 @@ function toggleHelp(force?: boolean, autoCloseMs = 0) {
     clearTimeout(helpTimer);
     if (!show) {
         if (helpEl) {
+            armReleaseGate();
             const el = helpEl;
             helpEl = null;
             el.classList.add("hh-help-out");
@@ -3444,6 +3450,25 @@ function tick() {
     }
 }
 
+// release-gate: after a keyboard, menu, guide or calibration closes, the pad stays neutral
+// until every button is up and both sticks are inside the deadzone.
+let releaseGate = false;
+let lastExpressionOpen = false;
+function armReleaseGate() {
+    releaseGate = true;
+    heldDir = null;
+    holdState.clear();
+}
+function padWaitingForRelease(pressed: boolean[], axes: ArrayLike<number>, deadzone: number): boolean {
+    if (!releaseGate) return false;
+    let stick = false;
+    for (let i = 0; i < 4; i++) if (Math.abs(axes[i] ?? 0) > deadzone) stick = true;
+    if (pressed.some(Boolean) || stick) return true;
+    releaseGate = false;
+    return false;
+}
+// end release-gate
+
 function tickInner() {
     // idle (controller untouched for a while, nothing of ours open): only watch for a button press, and keep the
     // highlight / menus in sync a couple of times a second instead of every frame — the first press wakes it up
@@ -3464,18 +3489,33 @@ function tickInner() {
     const pressed = pad.buttons.map(b => b.pressed || b.value > 0.5);
     const justPressed = (b: Btn) => pressed[b] && !prevPressed[b];
     if ((window as any).__hhNativeFileChooser) { prevPressed = pressed; heldDir = null; return; }
+    const expression = nativeExpressionPicker();
+    // The emoji / GIF / sticker picker is a Discord layer, not one of our overlays. When it
+    // disappears, the button that closed it must not click whatever is underneath.
+    if (lastExpressionOpen && !expression) armReleaseGate();
+    lastExpressionOpen = !!expression;
     const activity = controllerActivity(pad);
     const activeInput = pressed.some(Boolean) || stickDir(pad) || Math.abs(pad.axes[2] ?? 0) > settings.store.stickDeadzone || Math.abs(pad.axes[3] ?? 0) > settings.store.stickDeadzone;
     if (!controllerActive) {
+        // A close can happen as the mouse takes over. Let the gate clear while the pad sits idle,
+        // so the next real press is not swallowed.
+        if (releaseGate) padWaitingForRelease(pressed, pad.axes, settings.store.stickDeadzone);
         if (!activeInput || activity === lastControllerActivity) { lastControllerActivity = activity; prevPressed = pressed; return; }
         activateController();
     }
     lastControllerActivity = activity;
-    const expression = nativeExpressionPicker();
     const popupOwnsInput = !!expression || !!openMenu() || overlayCount() > 0;
     if (popupOwnsInput) navigationButtonsBlocked = true;
     else if (![Btn.LB, Btn.RB, Btn.LT, Btn.RT].some(b => pressed[b])) navigationButtonsBlocked = false;
     if (pressed.some(Boolean) || stickDir(pad)) { lastPadUse = performance.now(); bumpChecks(); }
+
+    // A keyboard, menu, guide or calibration just closed: ignore the pad until it is neutral,
+    // so the button or stick that closed it cannot click or move Discord.
+    if (padWaitingForRelease(pressed, pad.axes, settings.store.stickDeadzone)) {
+        prevPressed = pressed;
+        heldDir = null;
+        return;
+    }
 
     if (!helpShownOnce && pressed.some(Boolean)) {
         helpShownOnce = true;
@@ -3825,6 +3865,7 @@ function closeDrawer() {
     for (const el of document.querySelectorAll("[data-hh-heldring]")) el.removeAttribute("data-hh-heldring");
     for (const el of document.querySelectorAll("[data-hh-unclip]")) el.removeAttribute("data-hh-unclip");
     if (!drawerLayer && !document.documentElement.hasAttribute("data-hh-drawer-on")) return;
+    armReleaseGate();
     drawerLayer?.querySelector(":scope > .hh-brand")?.remove();
     drawerLayer?.removeAttribute("data-hh-drawer");
     drawerLayer = null; drawerMenu = null;
@@ -3983,7 +4024,7 @@ function changePanel(i: number, step: 1 | -1 | 0) {
 }
 function togglePanel(show = !panelEl) {
     if (!show) {
-        if (panelEl) { const el = panelEl; panelEl = null; el.classList.add("hh-help-out"); setTimeout(() => el.remove(), 160); }
+        if (panelEl) { armReleaseGate(); const el = panelEl; panelEl = null; el.classList.add("hh-help-out"); setTimeout(() => el.remove(), 160); }
         return;
     }
     if (panelEl) return;
@@ -4441,6 +4482,7 @@ function openCalibration(firstTime = false) {
     renderCalibStep();
 }
 function closeCalibration() {
+    if (calibEl) armReleaseGate();
     calibEl?.remove(); calibEl = null; calib = null;
 }
 function renderCalibStep() {
@@ -5863,6 +5905,7 @@ function dropPopout() {
 function closeKeyboard() {
     releaseAutocomplete();
     if (!kbEl) return;
+    armReleaseGate();
     const el = kbEl;
     if (pickerLayer) closePicker();
     clipOpen = false;
@@ -6545,8 +6588,7 @@ function usePointerKeyboard() {
     (window as any).__hhControllerActive = false;
     // Hide first so closing animations cannot leave glyphs or unstyled UI behind.
     for (const el of document.querySelectorAll<HTMLElement>(".hh-ring,.hh-frame,.hh-hints,.hh-debug,.hh-toast,.hh-kb,.hh-help,.hh-panel,.hh-padcard")) el.hidden = true;
-    closeKeyboard(); closeDrawer(); toggleHelp(false); togglePanel(false);
-    calibEl?.remove(); calibEl = null; calib = null;
+    closeKeyboard(); closeDrawer(); toggleHelp(false); togglePanel(false); closeCalibration();
     adjustMode = false; typingMode = false; heldDir = null; holdState.clear();
     setItem(null); section = null; sectionKey = ""; mode = "sections"; innerMsg = null; returnStack = [];
     nativePickerLock = null;

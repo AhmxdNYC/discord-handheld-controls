@@ -8,7 +8,7 @@ function setup(){
  const overlays=[{hidden:false}],styleEl={disabled:false},varsEl={disabled:false},attrs=new Set(['data-hh-btns','data-hh-menu-style']);
  const document={querySelectorAll:q=>q==='[data-hh-held]'?[]:overlays,documentElement:{removeAttribute:a=>attrs.delete(a)}};
  const window={};
- const prelude=`let prevPressed=[],extTransitions=[],sampledExtPad,extPad=null,calibEl=null,calib=null,adjustMode=false,typingMode=false,heldDir=null,holdState=new Map(),section=null,sectionKey='',mode='sections',innerMsg=null,returnStack=[],nativePickerLock=null,composerSendEl=null,lastPadUse=0; const noop=()=>{};const closeKeyboard=noop,closeDrawer=noop,toggleHelp=noop,togglePanel=noop,setItem=noop,shiftTitle=noop,bumpChecks=noop;`;
+ const prelude=`let prevPressed=[],extTransitions=[],sampledExtPad,extPad=null,calibEl=null,calib=null,adjustMode=false,typingMode=false,heldDir=null,holdState=new Map(),section=null,sectionKey='',mode='sections',innerMsg=null,returnStack=[],nativePickerLock=null,composerSendEl=null,lastPadUse=0; const noop=()=>{};const closeKeyboard=noop,closeDrawer=noop,toggleHelp=noop,togglePanel=noop,closeCalibration=noop,setItem=noop,shiftTitle=noop,bumpChecks=noop;`;
  const pad={buttons:[{pressed:true,value:1}],axes:[0,0,0,0]};
  const methods=new Function('window','document','styleEl','varsEl','getPad','stickDir','settings',prelude+code+`;return {activateController,usePointerKeyboard,onPointerDown,onPointerMove,onKeyboardInput,onWheelInput,controllerActivity,active:()=>controllerActive,baseline:()=>lastControllerActivity};`)(window,document,styleEl,varsEl,()=>pad,()=>null,{store:{stickDeadzone:.2}});
  return {...methods,styleEl,varsEl,attrs,overlays,pad};
