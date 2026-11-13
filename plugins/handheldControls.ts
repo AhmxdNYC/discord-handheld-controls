@@ -3513,32 +3513,32 @@ function notePadActivity(): boolean {
 }
 function clearLoopTimers() {
     if (raf) { cancelAnimationFrame(raf); raf = 0; }
-    if (pollTimer) { clearTimeout(pollTimer); pollTimer = 0; }
+    if (pollTimer) { window.clearTimeout(pollTimer); pollTimer = 0; }
 }
 function armNextTick() {
     if (!loopOn) return;
     const delay = nextPollDelay(!!document.hidden, anyPadConnected(), performance.now() - lastPadChangeAt);
     if (delay == null) {
-        if (pollTimer) { clearTimeout(pollTimer); pollTimer = 0; }
+        if (pollTimer) { window.clearTimeout(pollTimer); pollTimer = 0; }
         if (!raf) raf = requestAnimationFrame(tick);
         return;
     }
     if (raf) { cancelAnimationFrame(raf); raf = 0; }
-    if (!pollTimer) pollTimer = setTimeout(tick, delay);
+    if (!pollTimer) pollTimer = window.setTimeout(tick, delay);
 }
 function wakeLoop() {
     if (!loopOn) return;
     lastPadChangeAt = performance.now();
     clearLoopTimers();
-    if (document.hidden || !anyPadConnected()) pollTimer = setTimeout(tick, 0);
+    if (document.hidden || !anyPadConnected()) pollTimer = window.setTimeout(tick, 0);
     else raf = requestAnimationFrame(tick);
 }
 // A button can arrive while a 100 ms or 250 ms timer is still waiting. Run that poll now.
 // Leave a pending animation frame alone: cancelling it on every bridge event would starve the loop.
 function pokePoll() {
     if (!loopOn || raf || !pollTimer) return;
-    clearTimeout(pollTimer);
-    pollTimer = setTimeout(tick, 0);
+    window.clearTimeout(pollTimer);
+    pollTimer = window.setTimeout(tick, 0);
 }
 function onVisibility() {
     if (!loopOn) return;
