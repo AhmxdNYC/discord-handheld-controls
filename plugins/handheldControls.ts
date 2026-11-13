@@ -3445,11 +3445,28 @@ function getPad(): Gamepad | null {
     return pads.find(p => p.mapping === "standard" && p.buttons.length >= 16) ?? pads[0] ?? null;
 }
 
+// stick-hysteresis: a stick direction turns ON past the deadzone and only turns OFF once the stick falls back below
+// 60 % of it (Nioh 3 menu: ON ~0.61 / OFF ~0.37), so a stick resting near the edge doesn't flicker into double
+// steps. While held, the direction only changes when the other axis is clearly bigger (1.3x), not on a diagonal wobble.
+const STICK_OFF = 0.6, STICK_SWAP = 1.3;
+function stickDirFrom(x: number, y: number, dz: number, prev: Dir | null): Dir | null {
+    const ax = Math.abs(x), ay = Math.abs(y);
+    const along = (d: Dir) => d === "left" || d === "right" ? ax : ay;
+    const pick = (): Dir => ax > ay ? (x > 0 ? "right" : "left") : (y > 0 ? "down" : "up");
+    if (!prev) return ax < dz && ay < dz ? null : pick();
+    if (ax < dz * STICK_OFF && ay < dz * STICK_OFF) return null;
+    const horizontal = prev === "left" || prev === "right";
+    const other = horizontal ? ay : ax;
+    if (other >= dz && other > along(prev) * STICK_SWAP) return pick();
+    if (along(prev) < dz * STICK_OFF) return ax < dz && ay < dz ? null : pick();
+    const sameSign = horizontal ? (prev === "right") === (x > 0) : (prev === "down") === (y > 0);
+    return sameSign ? prev : pick();
+}
+// end stick-hysteresis
+let stickPrev: Dir | null = null;
 function stickDir(pad: Gamepad): Dir | null {
-    const dz = settings.store.stickDeadzone;
     const [x = 0, y = 0] = pad.axes;
-    if (Math.abs(x) < dz && Math.abs(y) < dz) return null;
-    return Math.abs(x) > Math.abs(y) ? (x > 0 ? "right" : "left") : (y > 0 ? "down" : "up");
+    return stickPrev = stickDirFrom(x, y, settings.store.stickDeadzone, stickPrev);
 }
 
 let errorCount = 0;

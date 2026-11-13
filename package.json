@@ -11,7 +11,7 @@
     "inject": "node scripts/inject.mjs",
     "uninject": "node scripts/inject.mjs --uninstall",
     "build:betterdiscord": "node scripts/build-betterdiscord.mjs",
-    "test": "node --test scripts/setup.test.mjs scripts/runtime.test.mjs scripts/input-transitions.test.mjs scripts/input-modality.test.mjs scripts/release-gate.test.mjs scripts/poll-schedule.test.mjs scripts/hint-html.test.mjs betterdiscord/host.test.mjs scripts/controller-status.test.mjs scripts/discord-suggestions.test.mjs scripts/editor-text.test.mjs"
+    "test": "node --test scripts/setup.test.mjs scripts/runtime.test.mjs scripts/input-transitions.test.mjs scripts/input-modality.test.mjs scripts/release-gate.test.mjs scripts/poll-schedule.test.mjs scripts/hint-html.test.mjs scripts/stick-hysteresis.test.mjs betterdiscord/host.test.mjs scripts/controller-status.test.mjs scripts/discord-suggestions.test.mjs scripts/editor-text.test.mjs"
   },
   "engines": {
     "node": ">=22"
