@@ -2403,6 +2403,16 @@ function updateContextActions(hide: boolean) {
     }
 }
 
+// hint-html:
+/** The hint bar's markup; hints whose buttons are all in `dead` are greyed (shown, but they do nothing here). */
+function hintsHtml(items: [string[], string][], dead: string[], badge: (b: any) => string): string {
+    return items.map(([bs, t]) => {
+        const off = bs.length > 0 && bs.every(b => dead.includes(b));
+        return `<span class="hh-hint${off ? " hh-hint-off" : ""}">${bs.map(badge).join("")}<span>${t}</span></span>`;
+    }).join("");
+}
+// end hint-html
+
 /** The widest set of top-bar hints (picking an area), measured once per button style. */
 let topHintsW = 0, topHintsFor = "";
 function topHintsWidth(): number {
@@ -2491,7 +2501,10 @@ function updateHints() {
         ? focusTag(focused!) : null;
     const replaced = new Set(actions?.flatMap(([bs]) => bs) ?? []);
     const items = actions ? [...actions, ...hintItems().filter(([bs]) => !bs.some(b => replaced.has(b)))] : hintItems();
-    const html = items.map(([bs, t]) => `<span class="hh-hint">${bs.map(badgeHtml).join("")}<span>${t}</span></span>`).join("");
+    // greyed: X when the item under the cursor is known to have no menu (pressing it would do nothing)
+    const xDead = mode === "inside" && !typingMode && !adjustMode && !(innerMsg && alive(innerMsg)) && !openMenu() && alive(focused)
+        && !replaced.has("X") && ctxKnown.get(ctxSig(focused!)) === false;
+    const html = hintsHtml(items, xDead ? ["X"] : [], badgeHtml);
     let rebuilt = false;
     if (hintsEl.dataset.html !== html) { hintsEl.dataset.html = html; hintsEl.innerHTML = html; rebuilt = true; }
     // above the message box, on the right (anywhere else: the bottom-right corner); while a side menu is open on the
@@ -6226,11 +6239,12 @@ html[data-hh-shift="slide"] [class*="layers_"] > [class*="baseLayer"] {
 .hh-adjust-label { z-index: 100003; font-size: 12px; }
 .hh-adjust-label b { color: var(--v-fg); font-weight: 700; }
 /* button hints bar */
-.hh-hints { position: fixed; z-index: 100001; display: flex; gap: 7px; align-items: center; padding: 2px 7px; border-radius: 6px; pointer-events: none;
-  background: color-mix(in srgb, var(--v-bg) 88%, transparent); border: 1px solid var(--v-line); color: var(--v-fg); font: 500 10.5px var(--v-font);
+.hh-hints { position: fixed; z-index: 100001; display: flex; gap: 8px; align-items: center; padding: 2px 7px; border-radius: 6px; pointer-events: none;
+  background: color-mix(in srgb, var(--v-bg) 88%, transparent); border: 1px solid var(--v-line); color: var(--v-fg); font: 500 12px var(--v-font);
   transition: opacity 200ms ease; backdrop-filter: blur(6px); }
 .hh-hints.off { opacity: 0; }
 .hh-hint { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.hh-hint.hh-hint-off { opacity: .4; }
 .hh-hints.hh-hints-top { padding: 0 6px; z-index: 100002; overflow: hidden; box-sizing: border-box; }
 [data-hh-title-shift] { justify-content: flex-start !important; padding-left: var(--hh-title-pad) !important; transition: padding-left 150ms ease; }
 /* button colours: per controller, plain, or the highlight colour — everywhere (beats the keyboard's own plain badges) */
@@ -6248,11 +6262,11 @@ html[data-hh-shift="slide"] [class*="layers_"] > [class*="baseLayer"] {
 :root[data-hh-btns$=" plain"] .hh-badge:is(#hh-never, *) { background: #1a1b1e !important; color: #ededed !important; border-color: #444 !important; }
 :root[data-hh-btns$=" accent"] .hh-badge:is(#hh-never, *) { background: color-mix(in srgb, var(--hh-accent) 85%, #000) !important; color: #fff !important; border-color: var(--hh-accent) !important; }
 .hh-hint > span:last-child { color: var(--v-dim); }
-.hh-hints .hh-badge { transform: none; margin: 0; height: 18px; min-width: 18px; padding: 0 4px; font-size: 10px !important;
+.hh-hints .hh-badge { transform: none; margin: 0; height: 20px; min-width: 20px; padding: 0 4px; font-size: 11px !important;
   background: var(--v-panel) !important; color: var(--v-fg) !important;
   border: 1px solid var(--v-line-2) !important; box-shadow: none !important; }
-.hh-hints .hh-badge.hh-face { width: 18px; padding: 0; }
-.hh-hints .hh-badge > svg { width: 12px; height: 12px; }
+.hh-hints .hh-badge.hh-face { width: 20px; padding: 0; }
+.hh-hints .hh-badge > svg { width: 13px; height: 13px; }
 /* the keyboard in the Blend / Discord styles */
 :root[data-hh-menu-style="blend"] :is(.hh-kb, .hh-hints) { --v-bg: var(--background-floating, var(--background-base-lowest, #111214));
   --v-panel: var(--background-modifier-hover, rgb(255 255 255 / .04)); --v-key: transparent;
