@@ -5734,6 +5734,7 @@ function nativeExpressionResults(layer: HTMLElement): HTMLElement[] {
     return [...layer.querySelectorAll<HTMLElement>(PICKER_RESULTS)].filter(el => isVisible(el) && !isDisabled(el));
 }
 function keepNativeExpressionFocus(layer: HTMLElement) {
+    if (!nativePickerLock) carryTextToPickerSearch(layer.querySelector("input")); // (just opened: search what you typed)
     nativePickerLock ??= { results: false, index: 0 };
     section = layer.querySelector('[role="dialog"]') ?? layer;
     mode = "inside";
@@ -5808,6 +5809,7 @@ function switchExpressionTab(layer: HTMLElement, step: 1 | -1) {
     const at = tabs.findIndex(tab => tab.getAttribute("aria-selected") === "true");
     const next = tabs[(Math.max(0, at) + step + tabs.length) % tabs.length];
     next.click();
+    setTimeout(() => { if (layer.isConnected) carryTextToPickerSearch(layer.querySelector("input")); }, 250);
     if (nativePickerLock) { nativePickerLock.results = false; nativePickerLock.index = 0; }
     section = layer.querySelector('[role="dialog"]') ?? layer; mode = "inside";
     setItem(next); bumpChecks();
@@ -5816,6 +5818,24 @@ function scrollExpressionPicker(layer: HTMLElement, step: 1 | -1) {
     const item = focused && expressionTile(focused) && layer.contains(focused) ? focused : layer.querySelector(PICKER_RESULTS);
     const sc = scrollableAncestor(item);
     if (sc && layer.contains(sc)) sc.scrollBy({ top: step * Math.max(80, sc.clientHeight * 0.6), behavior: "auto" });
+}
+/** What's typed in the message box, as one line for a picker search ("" when the box is empty or holds only emoji). */
+function composerSearchText(): string {
+    const box = kbField?.isConnected && !kbField.closest(PICKER_LAYER) ? kbField
+        : document.querySelector<HTMLElement>('form [role="textbox"][contenteditable="true"]');
+    if (!box) return "";
+    return editorText(box).replace(/:[\w~+-]+:/g, " ").replace(/\s+/g, " ").trim().slice(0, 100);
+}
+/** The text you typed follows you into the GIF / sticker / emoji search box (only into an empty one, so a search
+ *  you already changed there is kept). Returns true when it put text in. */
+function carryTextToPickerSearch(input: HTMLElement | null): boolean {
+    if (!(input instanceof HTMLInputElement) || input.value) return false;
+    const text = composerSearchText();
+    if (!text) return false;
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, text); // (React only hears a real set)
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    try { input.setSelectionRange(text.length, text.length); } catch { }
+    return true;
 }
 function openPicker(real: HTMLElement) {
     pickerOpener = real;
@@ -5828,7 +5848,10 @@ function openPicker(real: HTMLElement) {
         layer.setAttribute("data-hh-picker", "");
         document.documentElement.setAttribute("data-hh-picker-on", "");
         pickerInput = layer.querySelector<HTMLElement>("input");
-        pickerSearch = false; pkItems = []; pkSel = 0; pkSig = "";
+        pkItems = []; pkSel = 0; pkSig = "";
+        // typed something first? it's already the search, and the sticks keep typing it
+        pickerSearch = carryTextToPickerSearch(pickerInput);
+        if (pickerSearch) { kbSym = false; pickerInput?.focus(); }
         kbEl?.classList.add("hh-kb-picking");
         renderKeyboard();
         setTimeout(() => { pkRefresh(true); scheduleSuggestions(); }, 150);
@@ -5949,7 +5972,11 @@ function pkSwitchTab(step: 1 | -1) {
     const tabs = [...(pickerLayer?.querySelectorAll<HTMLElement>('[role="tab"]') ?? [])];
     const at = tabs.findIndex(t => t.getAttribute("aria-selected") === "true");
     tabs[(at + step + tabs.length) % tabs.length]?.click();
-    setTimeout(() => { pickerInput = pickerLayer?.querySelector("input") ?? null; pkRefresh(true); scheduleSuggestions(); }, 250);
+    setTimeout(() => {
+        pickerInput = pickerLayer?.querySelector("input") ?? null;
+        if (carryTextToPickerSearch(pickerInput) && !pickerSearch) { pickerSearch = true; kbSym = false; pickerInput?.focus(); renderKeyboard(); }
+        pkRefresh(true); scheduleSuggestions();
+    }, 250);
 }
 /** Our picker panel, in place of the keys (in search mode: beside the two clocks, which type the search). */
 function pickerPanelHtml() {
