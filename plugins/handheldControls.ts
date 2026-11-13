@@ -5700,9 +5700,10 @@ function pressComposerButton(i: number) {
     if (!real?.isConnected) return;
     if (real.matches(".hh-brand a")) { real.click(); return; }
     kbActionIdx = -1;
-    // GIF / sticker / emoji: their picker opens above the keyboard, which stays up to search it
-    if (/\bgifs?\b|sticker|emoji/i.test(real.getAttribute("aria-label") ?? "")) { renderComposerBar(); return openPicker(real); }
-    stopTyping(); // (anything else opens its own pop-out, navigated like any other)
+    // Anything else opens its own pop-out, navigated like any other. GIF / sticker / emoji too (#95270): the keyboard
+    // closes, and Discord's own picker opens with what you typed already in its search box, the results selected.
+    if (/\bgifs?\b|sticker|emoji/i.test(real.getAttribute("aria-label") ?? "")) nativePickerLock = null;
+    stopTyping();
     setTimeout(() => real.click(), 60);
 }
 
@@ -5730,12 +5731,16 @@ function nativeExpressionPicker(): HTMLElement | null {
         .find(layer => !layer.hasAttribute("data-hh-picker") && isVisible(layer)) ?? null;
 }
 let nativePickerLock: { results: boolean; index: number; } | null = null;
+/** The message-box text that went into the picker's search (sending a GIF / sticker then clears it from the box). */
+let nativePickerQuery = "";
 function nativeExpressionResults(layer: HTMLElement): HTMLElement[] {
     return [...layer.querySelectorAll<HTMLElement>(PICKER_RESULTS)].filter(el => isVisible(el) && !isDisabled(el));
 }
 function keepNativeExpressionFocus(layer: HTMLElement) {
-    if (!nativePickerLock) carryTextToPickerSearch(layer.querySelector("input")); // (just opened: search what you typed)
-    nativePickerLock ??= { results: false, index: 0 };
+    if (!nativePickerLock) { // just opened: search what you typed, and start on the results
+        nativePickerQuery = carryTextToPickerSearch(layer.querySelector("input")) ? composerSearchText() : "";
+        nativePickerLock = { results: !!nativePickerQuery, index: 0 };
+    }
     section = layer.querySelector('[role="dialog"]') ?? layer;
     mode = "inside";
     if (alive(focused) && layer.contains(focused) && (!nativePickerLock.results || !!expressionTile(focused))) return;
@@ -5770,6 +5775,11 @@ function handleNativeExpressionPicker(layer: HTMLElement, dir: Dir | null, jp: (
             (target as HTMLElement).click();
         }
         if (tile) setTimeout(() => { const current = nativeExpressionPicker(); if (current && nativePickerLock) keepNativeExpressionFocus(current); }, 120);
+        // a GIF / sticker went out: the words typed only to search for it leave the message box
+        if (tile && nativePickerQuery && /\bgifs?\b|sticker/i.test(layer.querySelector('[role="tab"][aria-selected="true"]')?.textContent ?? "")) {
+            const query = nativePickerQuery;
+            setTimeout(() => clearComposerIf(query), 400);
+        }
     }
     if (jp(Btn.Y)) { lock.results = false; setItem(layer.querySelector('[role="tab"][aria-selected="true"]')); }
     if (jp(Btn.X)) pressX();
@@ -5818,6 +5828,15 @@ function scrollExpressionPicker(layer: HTMLElement, step: 1 | -1) {
     const item = focused && expressionTile(focused) && layer.contains(focused) ? focused : layer.querySelector(PICKER_RESULTS);
     const sc = scrollableAncestor(item);
     if (sc && layer.contains(sc)) sc.scrollBy({ top: step * Math.max(80, sc.clientHeight * 0.6), behavior: "auto" });
+}
+/** Empty the message box, but only once the picker has closed and the box still holds exactly the search words. */
+function clearComposerIf(query: string) {
+    if (nativeExpressionPicker()) return;
+    const box = document.querySelector<HTMLElement>('form [role="textbox"][contenteditable="true"]');
+    if (!box || composerSearchText() !== query) return;
+    nativePickerQuery = "";
+    box.focus(); document.execCommand("selectAll"); document.dispatchEvent(new Event("selectionchange"));
+    setTimeout(() => { if (box.isConnected) { kbEdit(box, "deleteContentBackward"); box.blur(); } }, 150);
 }
 /** What's typed in the message box, as one line for a picker search ("" when the box is empty or holds only emoji). */
 function composerSearchText(): string {
