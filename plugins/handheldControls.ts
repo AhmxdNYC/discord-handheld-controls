@@ -4482,7 +4482,7 @@ function updateSuggestions() {
             const tt = clipOpen ? `${badgeHtml("DPAD")} ▲▼ choose · ${badgeHtml("A")} paste · ${badgeHtml("X")} remove · ${badgeHtml("B")} close`
                 : !pickerLayer ? (kbActionIdx >= 0 ? `${badgeHtml("DPAD")} ◀▶ buttons · ${badgeHtml("A")} press · ▼ keys · ${badgeHtml("B")} close` : typingText())
                 : pickerSearch ? `sticks type the search · ${badgeHtml("DPAD")} results · ${badgeHtml("A")} pick · ${badgeHtml("B")} done searching`
-                : `${badgeHtml("DPAD")} move · ${badgeHtml("A")} pick · ${badgeHtml("Y")} search · ${badgeHtml("LB")}${badgeHtml("RB")} tabs · ${badgeHtml("B")} back to message`;
+                : `${badgeHtml("DPAD")} move · ${badgeHtml("A")} ${/emoji/i.test(pkTab()) ? "add" : "send"} · ${badgeHtml("Y")} search · ${badgeHtml("LB")}${badgeHtml("RB")} tabs · ${badgeHtml("B")} back to keyboard`;
             if (tl.dataset.t !== tt) { tl.dataset.t = tt; tl.innerHTML = tt ? (pickerLayer || clipOpen || kbActionIdx >= 0 ? tt : `<span class="hh-tdots"><i></i><i></i><i></i></span>${tt}`) : ""; }
         }
         if (pv.innerHTML !== html2) pv.innerHTML = html2;
@@ -5714,6 +5714,11 @@ let pickerLayer: HTMLElement | null = null;
 let pickerInput: HTMLElement | null = null;
 let pickerOpener: HTMLElement | null = null;
 let pickerSearch = false;
+/** The message-box words carried into the picker's search when it opened ("" = none): once a GIF / sticker is sent
+ *  they leave the message box, since they were typed only to find it (#95299). */
+let pkQuery = "";
+/** Inside a GIF category ("Trending", a suggested term) that was picked in the picker: B steps back out of it. */
+let pkInCategory = false;
 type PkItem = { el: HTMLElement; key: string; html: string; };
 let pkItems: PkItem[] = [];
 let pkSel = 0;
@@ -5819,6 +5824,28 @@ function scrollExpressionPicker(layer: HTMLElement, step: 1 | -1) {
     const sc = scrollableAncestor(item);
     if (sc && layer.contains(sc)) sc.scrollBy({ top: step * Math.max(80, sc.clientHeight * 0.6), behavior: "auto" });
 }
+/** Empty the message box once the picker has closed, but only while it still holds exactly the search words.
+ *  A sticker picked while the box held text is only staged by Discord (it waits to go out with the message), so once
+ *  the search words are gone the staged sticker is sent: A on a sticker sends it, like A on a GIF. */
+function clearComposerIf(query: string, tries = 0) {
+    if (document.querySelector(`${PICKER_LAYER}[data-hh-picker]`)?.isConnected || nativeExpressionPicker()) {
+        if (tries < 10) setTimeout(() => clearComposerIf(query, tries + 1), 150); // (still closing)
+        return;
+    }
+    const box = document.querySelector<HTMLElement>('form [role="textbox"][contenteditable="true"]');
+    if (!box || composerSearchText() !== query) return;
+    box.focus(); document.execCommand("selectAll"); document.dispatchEvent(new Event("selectionchange"));
+    setTimeout(() => {
+        if (!box.isConnected) return;
+        kbEdit(box, "deleteContentBackward");
+        setTimeout(() => {
+            const staged = box.closest("form")?.querySelector('[class*="stickerPreviews"]')?.childElementCount;
+            if (box.isConnected && staged && !editorText(box).trim())
+                for (const type of ["keydown", "keypress", "keyup"]) box.dispatchEvent(keyEvent(type, "Enter"));
+            if (!kbEl) box.blur();
+        }, 150);
+    }, 150);
+}
 /** What's typed in the message box, as one line for a picker search ("" when the box is empty or holds only emoji). */
 function composerSearchText(): string {
     const box = kbField?.isConnected && !kbField.closest(PICKER_LAYER) ? kbField
@@ -5849,9 +5876,10 @@ function openPicker(real: HTMLElement) {
         document.documentElement.setAttribute("data-hh-picker-on", "");
         pickerInput = layer.querySelector<HTMLElement>("input");
         pkItems = []; pkSel = 0; pkSig = "";
-        // typed something first? it's already the search, and the sticks keep typing it
-        pickerSearch = carryTextToPickerSearch(pickerInput);
-        if (pickerSearch) { kbSym = false; pickerInput?.focus(); }
+        // typed something first? it's already the search: the results show at once, with the keys out of the way
+        // (#95299: never the keyboard beside the GIFs; Y types a different search)
+        pickerSearch = false; pkInCategory = false;
+        pkQuery = carryTextToPickerSearch(pickerInput) ? composerSearchText() : "";
         kbEl?.classList.add("hh-kb-picking");
         renderKeyboard();
         setTimeout(() => { pkRefresh(true); scheduleSuggestions(); }, 150);
@@ -5868,8 +5896,9 @@ function closePicker(escape = true) {
     pickerLayer?.removeAttribute("data-hh-picker");
     kbEl?.classList.remove("hh-kb-picking");
     document.documentElement.removeAttribute("data-hh-picker-on");
-    pickerLayer = pickerInput = null; pickerSearch = false; pkItems = []; pkSig = "";
+    pickerLayer = pickerInput = null; pickerSearch = false; pkItems = []; pkSig = ""; pkInCategory = false;
     if (kbEl) { kbField?.focus(); renderKeyboard(); scheduleSuggestions(); }
+    pkQuery = "";
 }
 const pkEsc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
 function pkTab(): string { return pickerLayer?.querySelector('[role="tab"][aria-selected="true"]')?.textContent?.trim() ?? ""; }
@@ -5882,7 +5911,8 @@ function pkCollect(): PkItem[] {
         const media = el.querySelector<HTMLImageElement | HTMLVideoElement>("img, video");
         const src = media ? (media as any).currentSrc || media.getAttribute("src") || "" : "";
         const label = (el.getAttribute("aria-label") || el.querySelector("[aria-label]")?.getAttribute("aria-label") || el.textContent || "").trim();
-        const text = el.matches('[class*="result_"]') ? (el.textContent ?? "").trim() : "";
+        // (only a GIF category — "Trending", a suggested term — has a name; a GIF's own text is just its favorite button)
+        const text = el.querySelector('[class*="categoryName"]')?.textContent?.trim() ?? "";
         const sur = el.querySelector("[data-surrogates]")?.getAttribute("data-surrogates");
         const pic = sur && !el.querySelector("img") ? `<span class="hh-pk-emo">${pkEsc(sur)}</span>` // (Discord draws these from a sprite sheet)
             : !src ? `<span class="hh-pk-name">${pkEsc(label.replace(/^Sticker,\s*/, "").split(",")[0])}</span>`
@@ -5905,12 +5935,21 @@ function pkRefresh(reset = false) {
     grid.className = `hh-pk-grid hh-pk-${pkTab().toLowerCase().replace(/[^a-z]/g, "") || "x"}`;
     grid.innerHTML = items.length ? items.map((it, i) => `<div class="hh-pk-t ${i === pkSel ? "sel" : ""}" data-i="${i}">${it.html}</div>`).join("")
         : `<div class="hh-pk-empty">${pickerSearch ? "Nothing found" : "Loading…"}</div>`;
+    pkShowSearch();
     const tabs = kbEl.querySelector(".hh-pk-tabs-list");
     if (tabs) {
         const t = [...pickerLayer.querySelectorAll('[role="tab"]')].map(tb => `<span class="hh-pk-tab ${tb.getAttribute("aria-selected") === "true" ? "on" : ""}">${pkEsc(tb.textContent?.trim() ?? "")}</span>`).join("");
         if (tabs.innerHTML !== t) tabs.innerHTML = t;
     }
     pkShowSel();
+}
+/** The picker's search words, shown above our results (Discord's own search box is hidden under them). */
+function pkShowSearch() {
+    const q = kbEl?.querySelector<HTMLElement>(".hh-pk-q");
+    if (!q) return;
+    const v = pickerInput instanceof HTMLInputElement ? pickerInput.value : "";
+    const html = v ? pkEsc(v) : `<span class="hh-pk-q-ph">${pkEsc(pickerInput?.getAttribute("placeholder") || "Search")}</span>`;
+    if (q.innerHTML !== html) q.innerHTML = html;
 }
 function pkShowSel() {
     const grid = kbEl?.querySelector(".hh-pk-grid");
@@ -5963,8 +6002,14 @@ function pkMove(dir: Dir) {
 function pkPick() {
     const it = pkItems[pkSel];
     if (!it?.el.isConnected) return pkRefresh(true);
+    const tab = pkTab();
+    const category = /\bgifs?\b/i.test(tab) && !!it.el.querySelector('[class*="categoryName"]');
+    const media = /\bgifs?\b|sticker/i.test(tab) && !category;
+    if (category) pkInCategory = true;
     // GIF results contain an Add to Favorites button; picking the GIF must click the tile itself.
     (it.el.matches('[role="button"]') ? it.el : it.el.querySelector<HTMLElement>("button, [role='button']") ?? it.el).click();
+    // a GIF / sticker went out: the words typed only to search for it leave the message box
+    if (media && pkQuery) { const query = pkQuery; setTimeout(() => clearComposerIf(query), 400); }
     // a category (GIF "Trending" / a search term): new results, start at the top of them
     setTimeout(() => { if (pickerLayer?.isConnected) pkRefresh(true); }, 300);
 }
@@ -5974,13 +6019,14 @@ function pkSwitchTab(step: 1 | -1) {
     tabs[(at + step + tabs.length) % tabs.length]?.click();
     setTimeout(() => {
         pickerInput = pickerLayer?.querySelector("input") ?? null;
-        if (carryTextToPickerSearch(pickerInput) && !pickerSearch) { pickerSearch = true; kbSym = false; pickerInput?.focus(); renderKeyboard(); }
+        if (carryTextToPickerSearch(pickerInput)) pkQuery ||= composerSearchText();
+        pkInCategory = false;
         pkRefresh(true); scheduleSuggestions();
     }, 250);
 }
 /** Our picker panel, in place of the keys (in search mode: beside the two clocks, which type the search). */
 function pickerPanelHtml() {
-    return `<div class="hh-pk"><div class="hh-pk-tabs">${badgeHtml("LB")}<span class="hh-pk-tabs-list"></span>${badgeHtml("RB")}</div><div class="hh-pk-grid"></div></div>`;
+    return `<div class="hh-pk"><div class="hh-pk-tabs">${badgeHtml("LB")}<span class="hh-pk-tabs-list"></span>${badgeHtml("RB")}<span class="hh-pk-search">🔍 <span class="hh-pk-q"></span></span></div><div class="hh-pk-grid"></div></div>`;
 }
 /** Picker controls while it's open; returns true when it handled the press (the sticks only type in search mode). */
 let pkJustSearched = false;
@@ -5997,8 +6043,9 @@ function handlePicker(jp: (b: Btn) => boolean, pressed: boolean[]): boolean {
         if (jp(Btn.RB)) pkSwitchTab(1);
         if (jp(Btn.Y)) { pickerSearch = true; pkJustSearched = true; kbSym = false; pickerInput?.focus(); renderKeyboard(); setTimeout(() => pkRefresh(true), 60); }
         if (jp(Btn.B)) {
-            const back = expressionBackButton(pickerLayer);
-            if (back) { back.click(); setTimeout(() => pkRefresh(true), 150); }
+            // B goes back to the keyboard; only a GIF category picked in here is stepped out of first
+            const back = pkInCategory ? expressionBackButton(pickerLayer) : undefined;
+            if (back) { pkInCategory = false; back.click(); setTimeout(() => pkRefresh(true), 150); }
             else closePicker();
         }
     } else if (jp(Btn.B)) { pickerSearch = false; renderKeyboard(); setTimeout(() => pkRefresh(true), 60); }
@@ -6489,6 +6536,9 @@ li[id^="chat-messages-"][data-hh-replying] > [class*="message_"]:is(#hh-never, *
 .hh-pk-tabs { flex: none; display: flex; align-items: center; gap: 6px; }
 .hh-pk-tabs .hh-badge { transform: scale(.7); margin: -4px; }
 .hh-pk-tabs-list { display: flex; gap: 4px; }
+.hh-pk-search { flex: 1 1 auto; min-width: 0; margin-left: 8px; padding: 3px 10px; border-radius: 6px; border: 1px solid var(--v-line); background: var(--v-panel);
+  color: var(--v-fg); font: 600 14px var(--v-font); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hh-pk-q-ph { color: var(--v-mute); font-weight: 500; }
 .hh-pk-tab { padding: 3px 12px; border-radius: 6px; border: 1px solid var(--v-line); color: var(--v-mute); font: 600 13px var(--v-font); }
 .hh-pk-tab.on { background: var(--v-sel); border-color: var(--v-sel); color: var(--v-sel-fg); }
 /* (a grid whose columns stretch to fill the row exactly: even edges on both sides, whatever the width) */
