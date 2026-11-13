@@ -2,6 +2,8 @@
 """Hands-free test harness for HandheldControls in Vesktop (Bazzite Game Mode).
 
   hh_harness.py pretest [--no-fix]   check the setup before any test (and clear Steam's input grab)
+  hh_harness.py ready [--wait S]     "controller ready" check before the human plays: pretest + the real pad is listed
+                                     and its raw presses arrive (press any button within S s, default 20; 0 = skip)
   hh_harness.py smoke [--shots DIR] [--channel /channels/G/C]  short scripted-pad run: nav down/up, open keyboard, type "hi", clear, close
   hh_harness.py pad "DOWN UP A:300"  press buttons on the scripted pad (NAME[:ms], default 120 ms)
 
@@ -173,6 +175,39 @@ async def pretest(fix=True):
     return ok, lines
 
 
+# ---------- ready: before a human session ----------
+PADS_JS = """(() => [...(navigator.getGamepads ? navigator.getGamepads() : [])].filter(Boolean)
+  .map(p => ({ i: p.index, id: p.id.slice(0, 60), mapping: p.mapping, buttons: p.buttons.length, connected: p.connected })))()"""
+RAW_JS = """(() => { let n = 0; for (const p of navigator.getGamepads ? navigator.getGamepads() : []) if (p)
+  n += p.buttons.filter(b => b.pressed).length + p.axes.filter(a => Math.abs(a) > 0.5).length; return n; })()"""
+
+
+async def ready(wait_s=20):
+    """Raw input first, then blame the plugin: pretest (plugin, bridge, Steam grab, no test override), then the real pad."""
+    ok, lines = await pretest()
+    page = await open_page()
+    pads = await page.ev(PADS_JS) or []
+    if pads:
+        for p in pads: lines.append(f"OK     pad {p['i']}: {p['id']} ({p['mapping'] or 'no mapping'}, {p['buttons']} buttons)")
+    else:
+        lines.append("INFO   no pad in navigator.getGamepads() (normal when the bridge feeds it; raw press check decides)")
+    if wait_s > 0:
+        print(f"Press any button on the controller within {wait_s} s ...", flush=True)
+        await page.ev("window.__hhReadyN = 0; window.__hhReadyHook = window.__hhExtPadSet; if (window.__hhReadyHook) window.__hhExtPadSet = s => { if (s && (s.b || []).some(v => v > 0.5)) window.__hhReadyN++; return window.__hhReadyHook(s); }")
+        seen, t0 = 0, time.time()
+        while time.time() - t0 < wait_s and not seen:
+            seen = (await page.ev(RAW_JS) or 0) + (await page.ev("window.__hhReadyN || 0") or 0)
+            await asyncio.sleep(0.1)
+        await page.ev("if (window.__hhReadyHook) window.__hhExtPadSet = window.__hhReadyHook; delete window.__hhReadyHook; delete window.__hhReadyN")
+        ok &= bool(seen)
+        lines.append(f"OK     raw press seen after {time.time() - t0:.1f} s" if seen else
+                     f"FAIL   no raw press in {wait_s} s: pad asleep/disconnected or Steam layout not Gamepad (check GamepadDebug)")
+    st = await page.ev(STATE_JS)
+    if st["testPad"]: await page.ev("window.__hhPad = false"); lines.append("FIXED  leftover test pad override turned off")
+    await page.ws.close()
+    return ok, lines
+
+
 # ---------- smoke ----------
 async def type_char(page, pad, ch):
     """Aim the right stick at the key's spot on its clock (read from the keyboard's own layout), then pull its trigger."""
@@ -274,12 +309,16 @@ def main(argv):
     global FOCUS_EMULATION
     FOCUS_EMULATION = "--no-focus-emulation" not in argv
     cmd = argv[0] if argv else "pretest"
-    if FOCUS_EMULATION and cmd in ("smoke", "pad", "pretest"):
+    if FOCUS_EMULATION and cmd in ("smoke", "pad", "pretest", "ready"):
         try: keep_focus_emulation()
         except Exception as e: print(f"INFO   focus emulation not started: {e}")
     if cmd == "pretest":
         ok, lines = asyncio.run(pretest(fix="--no-fix" not in argv))
         print("\n".join(lines)); print("PRETEST", "PASS" if ok else "FAIL"); return 0 if ok else 1
+    if cmd == "ready":
+        wait = int(argv[argv.index("--wait") + 1]) if "--wait" in argv else 20
+        ok, lines = asyncio.run(ready(wait))
+        print("\n".join(lines)); print("CONTROLLER READY" if ok else "CONTROLLER NOT READY"); return 0 if ok else 1
     if cmd == "smoke":
         shots = argv[argv.index("--shots") + 1] if "--shots" in argv else os.path.expanduser("~/hh-test-shots")
         ok, lines = asyncio.run(pretest()); print("\n".join(lines))
