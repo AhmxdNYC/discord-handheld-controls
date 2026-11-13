@@ -43,3 +43,22 @@ What the Nioh 3 mod project learned about controller and handheld use (PC RX 907
 - Screenshots can't prove timing; start video before the action. Windows capture: `ffmpeg gdigrab -i desktop` (window-title capture gives a static frame).
 - Keep harness scripts in the repo (Ally /tmp is wiped on reboot).
 - The human is the final check for feel ("twitching", "awkward delay") - get a cheap build to them early instead of more analysis.
+
+## 7. Implementation details from the Nioh 3 source (pc/21, 2026-11-12)
+Read from nioh3-engine `mod/Nioh3EngineFix/src/menu.cpp` (line numbers at that time). Their menu is a flat text list: no glyphs, no submenus, no input visualizer.
+- Open gesture: triple-tap Start, rising edges only. Window 900 ms from the first tap, and the gesture is cancelled if there's no new tap within 300 ms (247-261). If it's cancelled, the swallowed taps are replayed to the game as one 120 ms Start press. A single long hold is passed through. Start is hidden from the game while taps are pending (265-267).
+- Held buttons at open/close: a latch gives the game a neutral pad until every button is released (300-308). Open also clears pending edges, so the opening press never acts inside the menu (1441). Esc stays muted for 900 ms after closing (343).
+- Edges: `pressed = raw & ~prev` per poll, OR-ed into an atomic and consumed once per frame by the renderer, so presses between frames are never lost (236, 297, 2100).
+- Stick to d-pad: hysteresis, ON past 20000/32767 (~0.61), OFF below 12000 (~0.37) (229-232). Triggers count above 30/255.
+- Repeat: 400 ms first delay, then a fixed 90 ms, with no acceleration. Each direction has its own timer, reset on release (2106-2116).
+- Selection: stored by item id, not row index, so it survives list changes. It's restored on reopen and reset only if the item is hidden (1445). Wraps at the ends. Disabled rows stay selectable but dimmed.
+- Scroll: one row of context above the selection and two below (2342-2351).
+- Close: B/Esc from anywhere, a "Close menu" row, or the gesture again. It force-closes if the overlay stops drawing for 1.5 s.
+- Scale: `max(1, round(H/540*2)/2)`, so 800p (Ally) = 1.5x of an 8x16 font. It shrinks in 0.5 then 0.25 steps until it fits 96% x 94% of the screen. Panel alpha 0xD8 (~85%), corner note 0xA0 at 0.75x scale.
+- Fallback poll: if the game stops polling for 500 ms, the mod polls XInput itself every 16 ms (1962-1976).
+
+### What to try here (ideas, not tasks)
+- Stick hysteresis: ours uses one threshold, e.g. `plugins/handheldControls.ts:2688` (dz >= 0.35). Using ON ~0.6 / OFF ~0.37 would stop jitter at the edge causing double steps.
+- Swallow-until-release when the plugin opens its overlays/keyboard, so the opening press doesn't also act.
+- Keep focus by element id (we already use data-list-item-id), and restore it when panels re-render.
+- Our repeat timing (300 ms delay, 95 then 50 ms, speeds up after 900 ms) is already faster than theirs. Keep it, but check the feel on the Ally (human).
