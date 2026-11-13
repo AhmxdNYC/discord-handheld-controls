@@ -78,7 +78,7 @@ You can also stage without building:
 node scripts/setup.mjs --vencord /path/to/Vencord --stage-only
 cd /path/to/Vencord
 pnpm install --frozen-lockfile
-pnpm testTsc
+pnpm test:ts   # older Vencord: pnpm testTsc
 pnpm build
 pnpm inject
 ```

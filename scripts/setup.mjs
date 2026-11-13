@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { findNpm, installerArguments, run } from "./runtime.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const revision = "b52ed365cf2ea64a5019b419291a2d9d4d76852d";
+const revision = "d07030c0968e31e41caa0c35fda0ef8ae63a079e";
 const names = ["handheldControls.ts", "heldIndicator.ts", "gamepadDebug.ts"];
 const args = process.argv.slice(2);
 const help = `Usage: node scripts/setup.mjs [--vencord PATH] [--stage-only] [--inject|--uninstall] [--client discord|vencord|vesktop|betterdiscord] [--branch stable|ptb|canary|auto | --location PATH] [--plugins-dir PATH]
@@ -97,12 +97,15 @@ try {
     const version = /^pnpm@(\d+\.\d+\.\d+)$/.exec(pkg.packageManager)?.[1];
     if (!version) throw new Error("Vencord must declare an exact pnpm version");
     const tools = join(root, ".build", "tools", version);
-    const pnpm = join(tools, "node_modules", "pnpm", "bin", "pnpm.cjs");
-    if (!existsSync(pnpm)) {
+    // pnpm <=10 ships bin/pnpm.cjs; pnpm >=11 ships bin/pnpm.mjs (fetches its native binary on first use).
+    const pnpmBin = () => ["pnpm.cjs", "pnpm.mjs"].map(f => join(tools, "node_modules", "pnpm", "bin", f)).find(existsSync);
+    if (!pnpmBin()) {
         run(process.execPath, [findNpm(), "install", "--prefix", tools, "--ignore-scripts", "--no-audit", "--no-fund", `pnpm@${version}`], root);
     }
+    const pnpm = pnpmBin();
+    if (!pnpm) throw new Error(`pnpm ${version} installed without bin/pnpm.cjs or bin/pnpm.mjs`);
     run(process.execPath, [pnpm, "install", "--frozen-lockfile"], target);
-    run(process.execPath, [pnpm, "testTsc"], target);
+    run(process.execPath, [pnpm, pkg.scripts?.["test:ts"] ? "test:ts" : "testTsc"], target); // Vencord renamed testTsc -> test:ts
     run(process.execPath, [pnpm, "build"], target);
     console.log(`Build ready: ${join(target, "dist")}`);
     if (inject) run(process.execPath, [join(root, "scripts", "inject.mjs"), "--install", ...installArgs], root);

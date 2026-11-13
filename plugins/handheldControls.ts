@@ -369,7 +369,7 @@ const LANDMARK = 'form, nav, aside, section, header, main, [role="tablist"], [ro
 
 // ---------- state ----------
 let raf = 0;
-let pollTimer = 0;
+let pollTimer: ReturnType<typeof setTimeout> | 0 = 0;
 let loopOn = false;
 let lastPadSignature = "";
 let lastPadChangeAt = 0;

@@ -17,7 +17,7 @@ TARGETS = {
     "macOS-Intel": ("darwin", "amd64", "VencordInstallerCli-darwin", "f4c77a9dddd4a12deaae270b3dadfda25969dfcfa141cc2354cafe6344044b75"),
     "macOS-AppleSilicon": ("darwin", "arm64", "VencordInstallerCli-darwin", "f4c77a9dddd4a12deaae270b3dadfda25969dfcfa141cc2354cafe6344044b75"),
 }
-REVISION = "b52ed365cf2ea64a5019b419291a2d9d4d76852d"
+REVISION = "d07030c0968e31e41caa0c35fda0ef8ae63a079e"
 
 def download(url, path, expected=None):
     if not path.exists():

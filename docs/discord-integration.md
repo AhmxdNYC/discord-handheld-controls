@@ -4,7 +4,7 @@ The existing plugin depends on Vencord's settings API, DataStore, webpack module
 
 The injector runs on Windows, macOS and Linux: `scripts/setup.mjs --inject` stages the three plugins, builds Vencord and invokes the corresponding native Vencord Installer binary in development mode. The wrapper downloads a pinned installer release, checks its SHA-256 digest and propagates its exit status. `scripts/inject.mjs` also supports uninstall and channel/custom-location selection without rebuilding. Vencord handles client discovery and patching; this repository does not implement a second app.asar patcher. Manual install/uninstall remains available through `pnpm inject` / `pnpm uninject` in the checkout.
 
-The source was type-checked and built against Vencord revision `b52ed365cf2ea64a5019b419291a2d9d4d76852d`. This verifies compile-time integration, not a live official Discord session. Test actual gamepad detection, navigation, menu handling, split-keyboard entry, clipboard behavior and cleanup before describing official-client support as verified.
+The source was type-checked and built against Vencord revision `d07030c0968e31e41caa0c35fda0ef8ae63a079e`. This verifies compile-time integration, not a live official Discord session. Test actual gamepad detection, navigation, menu handling, split-keyboard entry, clipboard behavior and cleanup before describing official-client support as verified.
 
 The UI currently retains some Vesktop branding. Game Mode size and restart expect `VesktopNative` and the included Vesktop launcher. Gamescope sharing expects the optional bridge and virtual camera. Those integrations need client-specific adapters; they should not be advertised as regular-Discord features.
 
